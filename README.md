@@ -20,5 +20,5 @@ The data will be accessed in The Health Foundation's Secure Data Environment, wh
 As the data used for this analysis is not publically available, the code cannot be used to replicate the analysis on this dataset. However, with modifications the code will be able to be used on other patient-level HES extracts to prepare the dataset for analysis. 
 
 ## License
-This project is licensed under the [MIT License](LICENSE.md).
+This project is licensed under the [MIT License](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/LICENSE).
 
