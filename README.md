@@ -8,7 +8,7 @@ analysis-ready datasets for a defined programme of analyses.
 
 ## Project Description
 
-[Hospital Episode Statistics (HES)](link to be added) is a database containing 
+[Hospital Episode Statistics (HES)](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/hospital-episode-statistics) is a database containing 
 details of all hosptial admissions, A&E attendances and outpatient appointments 
 at NHS hospitals in England.
 
