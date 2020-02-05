@@ -1,0 +1,4 @@
+colnames,dataset,type
+ENCRYPTED_HESID,AA,integer
+OTHER,AA,string
+

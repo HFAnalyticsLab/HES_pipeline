@@ -46,7 +46,10 @@ refer to the [process document](doc/process.md).
 ## Installation
 
 Download the HES Pipeline by either 
-downloadingor cloning the repo with ssh or http.
+[downloading](link to be added) 
+or cloning the repo with 
+[ssh](link to be added)
+or [http](link to be added).
 
 ## Requirements
 
@@ -65,11 +68,11 @@ console compile the code:
 
 `> source("load_data.R")`
 
-Then call `pipeline()`, providing as arguments a path to the data directory, a 
+Then call `pipeline()` from pipeline.R, providing as arguments a path to the data directory, a 
 path to a directory for an SQLite database, a vector of dataset codes and a path 
-to a csv with expected columns. The data will be processed and written to the 
-database. N.B. This is a slow process and takes up a fair amount of memory to 
-run.
+to a csv with expected columns, inlcuding dataset codes and data types, if required. The data 
+will be processed and written to the database. N.B. This is a slow process and takes up a fair 
+amount of memory to run.
 
 Example run:
 
