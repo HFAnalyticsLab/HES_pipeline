@@ -1,4 +1,4 @@
-# HES_pipeline
+# HES pipeline
 
 Open-source R pipeline to clean and process patient-level Hospital Episode 
 Statistics (HES) & ONS Civil Registrations data, with the aim to produce 
@@ -46,20 +46,19 @@ refer to the [process document](doc/process.md).
 ## Installation
 
 Download the HES Pipeline by either 
-[downloading](link to be added) 
-or cloning the repo with 
-[ssh](link to be added)
-or [http](link to be added).
+downloading or [cloning the repo](https://github.com/HFAnalyticsLab/HES_pipeline.git).
 
 ## Requirements
 
-The HES pipeline was built under R version 3.5.1 (2018-07-02) -- "Feather 
-Spray".
+The HES pipeline was built under R version 3.6.2 -- "Dark and Stormy Night".
 
 The following R packages are required to run the HES pipeline:
 *  data.table (1.12.0)
 *  tidyverse (1.2.1)
 *  DBI (1.0.0)
+*  logger
+*  tidylog
+*  plyr
 
 ## Usage
 
@@ -81,4 +80,4 @@ Example run:
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE)
+This project is licensed under the [MIT License](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/LICENSE)
