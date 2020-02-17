@@ -17,16 +17,16 @@ mutate_if_present <- function(data, cols, fn) {
 # to NA.
 # Returns a modified dataframe.
 convert_to_NA <- function(data, list_of_cols, v) {
-  return(data %>% mutate_if_present(list_of_cols, funs(na_if(., v))))
+  return(data %>% mutate_if_present(list_of_cols, ~na_if(., v)))
 }
 
 
 # Parse a list of columns (or single column) converting strings to date format, 
-# e.g. YYYY-MM-DD.
+# e.g. 2010-31-01.
 # Requires  a dataframe, a list of columns as strings and a date format e.g. "%Y%m%d.
 # Returns a modified dataframe.
-convert_date <- function(data, list_of_cols, date_format) {
-  return(data %>% mutate_if_present(list_of_cols, funs(as.Date(., date_format))))
+convert_date <- function(data, list_of_cols) {
+  return(data %>% mutate_if_present(list_of_cols, as.Date))
 }
 
 
@@ -34,7 +34,7 @@ convert_date <- function(data, list_of_cols, date_format) {
 # Requires  a dataframe, and a list of columns as strings.
 # Returns a modified dataframe.
 convert_to_int <- function(data, list_of_cols) {
-  return(mutate_if_present(data, list_of_cols, funs(as.integer(.))))
+  return(mutate_if_present(data, list_of_cols, as.integer))
 }
 
 
@@ -44,8 +44,18 @@ convert_to_int <- function(data, list_of_cols) {
 # and a list of values to replace with.
 # Returns a modified dataframe.
 convert_vals <- function(data, list_of_cols, old_vals, new_vals) {
-  return(data %>% mutate_if_present(list_of_cols, funs(mapvalues(., old_vals, new_vals))))
+  return(data %>% mutate_if_present(list_of_cols, ~plyr::mapvalues(., old_vals, new_vals)))
 }
+
+
+# Generates a vector of headers corresponding to the provided string with numbers 01 to 
+# n appended, n times
+# Requires a string and a maximum number
+# Returns a character vector
+generate_numbered_headers <- function(string, n) {
+  return(c(str_c(string, "0", 1:9), str_c(string, 10:n)))
+}
+
 
 # Parse columns, where present, into required data formats.
 # Requires a dataframe.
@@ -72,107 +82,48 @@ parse_HES <- function(data) {
            convert_to_NA(c("AEKEY"), "0") %>%
            convert_to_NA(c("ETHNOS", "FIRSTATT"), "X") %>%
            convert_to_NA(c("ETHNOS"), "Z") %>%
-           convert_to_NA(c("OPERTN_01", "OPERTN_02", "OPERTN_03", "OPERTN_04", "OPERTN_05",
-                           "OPERTN_06", "OPERTN_07", "OPERTN_08", "OPERTN_09", "OPERTN_10",
-                           "OPERTN_11", "OPERTN_12", "OPERTN_13", "OPERTN_14", "OPERTN_15",
-                           "OPERTN_16", "OPERTN_17", "OPERTN_18", "OPERTN_19", "OPERTN_20",
-                           "OPERTN_21", "OPERTN_22", "OPERTN_23","OPERTN_24"), "-") %>%
-           convert_to_NA(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
-                           "ELECDATE", "EPIEND", "EPISTART", "OPDATE_01", "OPDATE_02",
-                           "OPDATE_03", "OPDATE_04", "OPDATE_05", "OPDATE_06", 
-                           "OPDATE_07", "OPDATE_08", "OPDATE_09", "OPDATE_10",
-                           "OPDATE_11", "OPDATE_12", "OPDATE_13", "OPDATE_14",
-                           "OPDATE_15", "OPDATE_16", "OPDATE_17", "OPDATE_18",
-                           "OPDATE_19", "OPDATE_20", "OPDATE_21", "OPDATE_22",
-                           "OPDATE_23", "OPDATE_24", "RTTPEREND", "RTTPERSTART", 
+           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "-") %>%
+           convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
+                           "ELECDATE", "EPIEND", "EPISTART",  "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
-                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"), 
+                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
+                           generate_numbered_headers("OPDATE_", 24)), 
                          "1800-01-01") %>%
-           convert_to_NA(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
-                           "ELECDATE", "EPIEND", "EPISTART", "OPDATE_01", "OPDATE_02",
-                           "OPDATE_03", "OPDATE_04", "OPDATE_05", "OPDATE_06", 
-                           "OPDATE_07", "OPDATE_08", "OPDATE_09", "OPDATE_10",
-                           "OPDATE_11", "OPDATE_12", "OPDATE_13", "OPDATE_14",
-                           "OPDATE_15", "OPDATE_16", "OPDATE_17", "OPDATE_18",
-                           "OPDATE_19", "OPDATE_20", "OPDATE_21", "OPDATE_22",
-                           "OPDATE_23", "OPDATE_24", "RTTPEREND", "RTTPERSTART", 
+           convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
+                           "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
-                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"), 
+                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
+                           generate_numbered_headers("OPDATE_", 24)), 
                          "1801-01-01") %>%
-           convert_to_NA(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
-                           "ELECDATE", "EPIEND", "EPISTART", "OPDATE_01", "OPDATE_02",
-                           "OPDATE_03", "OPDATE_04", "OPDATE_05", "OPDATE_06", 
-                           "OPDATE_07", "OPDATE_08", "OPDATE_09", "OPDATE_10",
-                           "OPDATE_11", "OPDATE_12", "OPDATE_13", "OPDATE_14",
-                           "OPDATE_15", "OPDATE_16", "OPDATE_17", "OPDATE_18",
-                           "OPDATE_19", "OPDATE_20", "OPDATE_21", "OPDATE_22",
-                           "OPDATE_23", "OPDATE_24", "RTTPEREND", "RTTPERSTART", 
+           convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
+                           "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
-                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"), 
+                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
+                           generate_numbered_headers("OPDATE_", 24)), 
                          "1600-01-01") %>%
-           convert_to_NA(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
-                           "ELECDATE", "EPIEND", "EPISTART", "OPDATE_01", "OPDATE_02",
-                           "OPDATE_03", "OPDATE_04", "OPDATE_05", "OPDATE_06", 
-                           "OPDATE_07", "OPDATE_08", "OPDATE_09", "OPDATE_10",
-                           "OPDATE_11", "OPDATE_12", "OPDATE_13", "OPDATE_14",
-                           "OPDATE_15", "OPDATE_16", "OPDATE_17", "OPDATE_18",
-                           "OPDATE_19", "OPDATE_20", "OPDATE_21", "OPDATE_22",
-                           "OPDATE_23", "OPDATE_24", "RTTPEREND", "RTTPERSTART", 
+           convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
+                           "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
-                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"), 
+                           "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
+                           generate_numbered_headers("OPDATE_", 24)), 
                          "1582-10-15") %>%
            convert_to_NA(c("APPTDATE", "ARRIVALDATE"), "18000101") %>%
            convert_to_NA(c("APPTDATE", "ARRIVALDATE"), "18010101") %>%
-           convert_to_NA(c("DOMPROC", "GPPRAC", "MAINSPEF", "OPERTN_01", "OPERTN_02", 
-                           "OPERTN_03", "OPERTN_04", "OPERTN_05", "OPERTN_06", "OPERTN_07", 
-                           "OPERTN_08", "OPERTN_09", "OPERTN_10", "OPERTN_11", "OPERTN_12", 
-                           "OPERTN_13", "OPERTN_14", "OPERTN_15", "OPERTN_16", "OPERTN_17", 
-                           "OPERTN_18", "OPERTN_19", "OPERTN_20", "OPERTN_21", "OPERTN_22", 
-                           "OPERTN_23","OPERTN_24", "TRETSPEF"), "&") %>%
-           convert_to_NA(c("OPERTN_01", "OPERTN_02", "OPERTN_03", "OPERTN_04", "OPERTN_05",
-                           "OPERTN_06", "OPERTN_07", "OPERTN_08", "OPERTN_09", "OPERTN_10",
-                           "OPERTN_11", "OPERTN_12", "OPERTN_13", "OPERTN_14", "OPERTN_15",
-                           "OPERTN_16", "OPERTN_17", "OPERTN_18", "OPERTN_19", "OPERTN_20",
-                           "OPERTN_21", "OPERTN_22", "OPERTN_23","OPERTN_24"), "X999") %>%
-           convert_to_NA(c("OPERTN_01", "OPERTN_02", "OPERTN_03", "OPERTN_04", "OPERTN_05",
-                           "OPERTN_06", "OPERTN_07", "OPERTN_08", "OPERTN_09", "OPERTN_10",
-                           "OPERTN_11", "OPERTN_12", "OPERTN_13", "OPERTN_14", "OPERTN_15",
-                           "OPERTN_16", "OPERTN_17", "OPERTN_18", "OPERTN_19", "OPERTN_20",
-                           "OPERTN_21", "OPERTN_22", "OPERTN_23","OPERTN_24"), "X998") %>%
-           convert_to_NA(c("OPERTN_01", "OPERTN_02", "OPERTN_03", "OPERTN_04", "OPERTN_05",
-                           "OPERTN_06", "OPERTN_07", "OPERTN_08", "OPERTN_09", "OPERTN_10",
-                           "OPERTN_11", "OPERTN_12", "OPERTN_13", "OPERTN_14", "OPERTN_15",
-                           "OPERTN_16", "OPERTN_17", "OPERTN_18", "OPERTN_19", "OPERTN_20",
-                           "OPERTN_21", "OPERTN_22", "OPERTN_23","OPERTN_24"), "X997") %>%
+           convert_to_NA(c(c("DOMPROC", "GPPRAC", "MAINSPEF", "TRETSPEF"),
+                           generate_numbered_headers("OPERTN_", 24)), "&") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X999") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X998") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X997") %>%
            convert_to_NA(c("REFERORG"), "X99998") %>%
            convert_to_NA(c("REFERORG"), "X99999") %>%
            convert_to_NA(c("GPPRAC"), "V81998") %>%
            convert_to_NA(c("GPPRAC"), "V81997") %>%
            convert_to_NA(c("GPPRAC"), "V81999") %>%
            convert_to_NA(c("LSOA11"), "Z99999999") %>%
-           convert_to_NA(c("DIAG_01", "DIAG_02", "DIAG_03", "DIAG_04", "DIAG_05", "DIAG_06", "DIAG_07",
-                          "DIAG_08", "DIAG_09", "DIAG_10", "DIAG_11", "DIAG_12", "DIAG_13", "DIAG_14",
-                          "DIAG_15", "DIAG_16", "DIAG_17", "DIAG_18", "DIAG_19","DIAG_20"), "R96X") %>%
-           convert_to_NA(c("DIAG_01", "DIAG_02", "DIAG_03", "DIAG_04", "DIAG_05", "DIAG_06", "DIAG_07",
-                           "DIAG_08", "DIAG_09", "DIAG_10", "DIAG_11", "DIAG_12", "DIAG_13", "DIAG_14",
-                           "DIAG_15", "DIAG_16", "DIAG_17", "DIAG_18", "DIAG_19","DIAG_20"), "R69X6") %>%
-           convert_to_NA(c("DIAG_01", "DIAG_02", "DIAG_03", "DIAG_04", "DIAG_05", "DIAG_06", "DIAG_07",
-                           "DIAG_08", "DIAG_09", "DIAG_10", "DIAG_11", "DIAG_12", "DIAG_13", "DIAG_14",
-                           "DIAG_15", "DIAG_16", "DIAG_17", "DIAG_18", "DIAG_19","DIAG_20"), "R69X8") %>%
-           convert_to_NA(c("DIAG_01", "DIAG_02", "DIAG_03", "DIAG_04", "DIAG_05", "DIAG_06", "DIAG_07",
-                           "DIAG_08", "DIAG_09", "DIAG_10", "DIAG_11", "DIAG_12", "DIAG_13", "DIAG_14",
-                           "DIAG_15", "DIAG_16", "DIAG_17", "DIAG_18", "DIAG_19","DIAG_20"), "R69X3") %>%
-           convert_date(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
-                          "ELECDATE", "EPIEND", "EPISTART", "OPDATE_01", "OPDATE_02",
-                          "OPDATE_03", "OPDATE_04", "OPDATE_05", "OPDATE_06", 
-                          "OPDATE_07", "OPDATE_08", "OPDATE_09", "OPDATE_10",
-                          "OPDATE_11", "OPDATE_12", "OPDATE_13", "OPDATE_14",
-                          "OPDATE_15", "OPDATE_16", "OPDATE_17", "OPDATE_18",
-                          "OPDATE_19", "OPDATE_20", "OPDATE_21", "OPDATE_22",
-                          "OPDATE_23", "OPDATE_24", "RTTPEREND", "RTTPERSTART", 
-                          "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
-                          "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"), "%Y%m%d") %>%
-           convert_date(c("MYDOB", "PARTYEAR"), "%Y%m") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R96X") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X6") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X8") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X3") %>%
            convert_vals(c("ADMIMETH"), c("2A", "2B", "2C", "2D"), c("66", "67", "68", "68")) %>%
            convert_vals(c("DOMPROC"), c("-"), c("None")) %>%
            convert_vals(c("SPELEND"), c("N", "Y"), c(0, 1)) %>%
