@@ -8,7 +8,7 @@ analysis-ready datasets for a defined programme of analyses.
 
 ## Project Description
 
-[Hospital Episode Statistics (HES)](link to be added) is a database containing 
+[Hospital Episode Statistics (HES)](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/hospital-episode-statistics) is a database containing 
 details of all hosptial admissions, A&E attendances and outpatient appointments 
 at NHS hospitals in England.
 
@@ -26,7 +26,7 @@ pre-approved analysis projects work with the cleaned data sets.
 We are planning to use HES data linked to Civil Registrations (deaths) covering
 the last 10 years as well as quarterly data updated for the next three years. 
 Our data application has been approved by the NHS Digital [Data Access Request 
-Service (DARS)](link to be added) and development of this pipeline has now 
+Service (DARS)](https://digital.nhs.uk/services/data-access-request-service-dars) and development of this pipeline has now 
 commenced.
 
 The data will be accessed in The Health Foundation's Secure Data Environment; a 
@@ -87,8 +87,4 @@ Example run:
 
 ## License
 
-<<<<<<< Updated upstream
 This project is licensed under the [MIT License](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/LICENSE)
-=======
-This project is licensed under the [MIT License](LICENSE)
->>>>>>> Stashed changes
