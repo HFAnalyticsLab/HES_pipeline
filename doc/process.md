@@ -16,7 +16,9 @@ respective datasets.
     3. Merge ONS and bridge data (required to combine ONS with HES data)
     4. Parse data
     5. Derive new variables
-5. Iterate over each HES dataset:
+    6. Write the data to a table in the SQLite database
+    7. Log table name and processing time
+6. Iterate over each HES dataset:
     1. Iterate over each file in a dataset:
         1. Read in the ID column for the file
         2. Count the number of rows
@@ -25,14 +27,18 @@ respective datasets.
         5. For each 1 million row chunk in a file:
             1. Read in the data, coercing data types
             2. Confirm all headers are present
-            3. Write the data to a table in the SQLite database
-            4. Parse data
-            5. Derive new variables
+            3. Parse data
+            4. Derive new variables
+            5. Write the data to a table in the SQLite database
             6. Log file name, number of records and processing time
     2. Concatenate the list of IDs
     3. Log dataset name, total number of records and total processing time
+7. Update database
+    1. Flag duplicates in APC, AE and OP datasets
+    2. Update derived variables in APC dataset
+    3. 
+8. Create summary tables, save as csv and add to database
 
-~~6. Store IDs as a table in the SQLite database~~
 
 The following diagram describes this process as a flowchart. Functions are 
 marked as green squares, user parameters to be input to the pipeline are gold
