@@ -1,5 +1,6 @@
 library(tidyverse)
 library(tidylog)
+library(rlang)
 source("src/clean.R")
 
 library(furrr)
@@ -14,13 +15,32 @@ derive_extract <- function(data, filename) {
 }
 
 
+# Add new named column, with single value (for later processing).
+# Requires a dataframe,a list of columns to test for and a value.
+# Returns a modified dataframe.
+derive_new <- function(data, cols, new_col, v) {
+  return(if(all(cols %in% names(data))) {
+    mutate(data, !!new_col := v)
+  } else {
+    data
+  })
+}
+
+
 # Derive a column flagging missing data in another column.
 # Requires a dataframe, a column to check for NAs and a new column 
 # name, both as strings.
+# NB tidylog::mutate cannot be used here because of the way the arguments
+# are passed. Logging of new variables therefore added manually. 
 # Returns a modified dataframe.
-derive_missing <- function(data, missing_col, new_col) {
-  return(mutate_if_present(data, c(missing_col), 
-                    funs(!! paste0(new_col) := ifelse(is.na(eval(parse(text=missing_col))), TRUE, FALSE))))
+derive_missing <- function(data, missing_col, new_col, tidy_log) {
+  if(missing_col %in% names(data)) {
+    data <- dplyr::mutate(data, !!new_col := ifelse(is.na(!!rlang::sym(missing_col)), TRUE, FALSE))
+    sink(tidy_log, append = TRUE)
+    cat(paste0("mutate_at: new variable '", new_col, "'\n"))
+    sink()
+  }
+  return(data)
 }
 
 
@@ -28,8 +48,8 @@ derive_missing <- function(data, missing_col, new_col) {
 # Requires a dataframe.
 # Returns a modifed dataframe.
 derive_ethnicity <- function(data) {
-  return(mutate_if_present(data, "ETHNOS", 
-                    list(ETHNIC5 = 
+  return(mutate_if_present(data, cols = "ETHNOS", 
+                    fn = list(ETHNIC5 = 
                            ~case_when(ETHNOS == "A" |
                                        ETHNOS == "B" |
                                        ETHNOS == "C" ~ "White",
