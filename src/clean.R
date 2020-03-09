@@ -82,52 +82,53 @@ parse_HES <- function(data) {
            convert_to_NA(c("AEKEY"), "0") %>%
            convert_to_NA(c("ETHNOS", "FIRSTATT"), "X") %>%
            convert_to_NA(c("ETHNOS"), "Z") %>%
-           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "-") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", n = 24), "-") %>%
            convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
                            "ELECDATE", "EPIEND", "EPISTART",  "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
                            "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
-                           generate_numbered_headers("OPDATE_", 24)), 
+                           generate_numbered_headers("OPDATE_", n = 24)), 
                          "1800-01-01") %>%
            convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
                            "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
                            "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
-                           generate_numbered_headers("OPDATE_", 24)), 
+                           generate_numbered_headers("OPDATE_", n = 24)), 
                          "1801-01-01") %>%
            convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
                            "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
                            "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
-                           generate_numbered_headers("OPDATE_", 24)), 
+                           generate_numbered_headers("OPDATE_", n = 24)), 
                          "1600-01-01") %>%
            convert_to_NA(c(c("ARRIVALDATE", "ADMIDATE", "DISDATE", "DISREADYDATE", 
                            "ELECDATE", "EPIEND", "EPISTART", "RTTPEREND", "RTTPERSTART", 
                            "SUBDATE", "APPTDATE", "DNADATE", "REQDATE", "DOD", "DOR",
                            "DISDATE", "ccdisdate", "ccdisrdydate", "ccstartdate"),
-                           generate_numbered_headers("OPDATE_", 24)), 
+                           generate_numbered_headers("OPDATE_", n = 24)), 
                          "1582-10-15") %>%
            convert_to_NA(c("APPTDATE", "ARRIVALDATE"), "18000101") %>%
            convert_to_NA(c("APPTDATE", "ARRIVALDATE"), "18010101") %>%
            convert_to_NA(c(c("DOMPROC", "GPPRAC", "MAINSPEF", "TRETSPEF"),
-                           generate_numbered_headers("OPERTN_", 24)), "&") %>%
-           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X999") %>%
-           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X998") %>%
-           convert_to_NA(generate_numbered_headers("OPERTN_", 24), "X997") %>%
+                           generate_numbered_headers("OPERTN_", n = 24)), "&") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", n = 24), "X999") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", n = 24), "X998") %>%
+           convert_to_NA(generate_numbered_headers("OPERTN_", n = 24), "X997") %>%
            convert_to_NA(c("REFERORG"), "X99998") %>%
            convert_to_NA(c("REFERORG"), "X99999") %>%
            convert_to_NA(c("GPPRAC"), "V81998") %>%
            convert_to_NA(c("GPPRAC"), "V81997") %>%
            convert_to_NA(c("GPPRAC"), "V81999") %>%
            convert_to_NA(c("LSOA11"), "Z99999999") %>%
-           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R96X") %>%
-           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X6") %>%
-           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X8") %>%
-           convert_to_NA(generate_numbered_headers("DIAG_", 20), "R69X3") %>%
-           convert_vals(c("ADMIMETH"), c("2A", "2B", "2C", "2D"), c("66", "67", "68", "68")) %>%
-           convert_vals(c("DOMPROC"), c("-"), c("None")) %>%
-           convert_vals(c("SPELEND"), c("N", "Y"), c(0, 1)) %>%
-           convert_vals(c("STARTAGE", "APPTAGE", "ARRIVALAGE"), 7001:7007, seq(0, 0, length.out = (7007-7000))) %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", n = 20), "R69X") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", n = 20), "R69X6") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", n = 20), "R69X8") %>%
+           convert_to_NA(generate_numbered_headers("DIAG_", n = 20), "R69X3") %>%
+           convert_vals(c("ADMIMETH"), old_vals = c("2A", "2B", "2C", "2D"), new_vals = c("66", "67", "68", "68")) %>%
+           convert_vals(c("DOMPROC"), old_vals = c("-"), new_vals = c("None")) %>%
+           convert_vals(c("SPELEND"), old_vals = c("N", "Y"), new_vals = c(0, 1)) %>%
+           convert_vals(c("STARTAGE", "APPTAGE", "ARRIVALAGE"), old_vals = 7001:7007, 
+                        new_vals = seq(0, 0, length.out = (7007-7000))) %>%
            convert_to_int(c("ADMIMETH", "FIRSTATT"))
   )
 }
