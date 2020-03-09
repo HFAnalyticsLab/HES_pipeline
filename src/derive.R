@@ -74,7 +74,7 @@ derive_ethnicity <- function(data) {
 # Requires a dataframe.
 # Returns a modified dataframe.
 derive_procode3 <- function(data) {
-  return(mutate_if_present(data, "PROCODE", list(PROCODE3 = ~substr(., 1, 3))))
+  return(mutate_if_present(data, cols = "PROCODE", fn = list(PROCODE3 = ~substr(., 1, 3))))
 }
 
 
@@ -85,37 +85,137 @@ derive_row_quality <- function(data, cols) {
   if(all(cols %in% names(data))) {
     mutate(data, ROWQUALITY = data %>%
              dplyr::select(one_of(cols)) %>%
-             future_map(is.na) %>%
+             future_map(function(x) !is.na(x)) %>%
              future_pmap_dbl(sum))
   } else {
     data
   }
 }
 
+
+# Derive TRANSIT column, by testing values in ADMISORC, ADMIMETH & DISDEST.
+# Derived values:
+# 0 - the default, corresponding to admission not being a transfer in and 
+# discharge not being a transfer out.
+# 1 - admission is any other than a transfer in and discharge is a transfer
+# out.
+# 2 - admission is a transfer in and discharge is a transfer out.
+# 3 - admission is a transfer in and discharge is any other than transfer
+# out.
+# N.B. `case_when()`` evaluates arguments in order. This means that TRANSIT 
+# = 2 (transfer in/transfer out) supersedes TRANSIT = 3 (transfer in/not a 
+# transfer out). Transit 0 is assigned by default if none of the other 
+# conditions match.
+# Requires a dataframe.
+# Returns a modified dataframe.
+derive_transit <- function(data) {
+  if(all(c("ADMISORC", "ADMIMETH", "DISDEST") %in% names(data))) {
+    mutate(data, TRANSIT = case_when(!(ADMISORC %in% c(51,52,53)) &
+                                       (DISDEST %in% c(51,52,53)) &
+                                       !(ADMIMETH %in% c(67,81)) ~ 1,
+                                     ((ADMISORC %in% c(51,52,53)) | (ADMIMETH %in% c(67,81))) &
+                                       (DISDEST %in% c(51,52,53)) ~ 2,
+                                     ((ADMISORC %in% c(51,52,53)) | (ADMIMETH %in% c(67,81))) &
+                                       !(DISDEST %in% c(51,52,53)) ~ 3,
+                                     TRUE ~ 0))
+  } else {
+    data
+  }
+}
+
+  
+# Derive ADMIDATE_FILLED column, by assessing whether ADMIDATE is present or missing.
+# If missing but EPISTART is present, it is the first episode and not a transfer in
+# impute ADMIDATE from EPISTART.
+# Requires a dataframe.
+# Returns a modifed dataframe.
+derive_admidate_filled <- function(data) {
+  return(if(all(c("ADMIDATE", "EPISTART", "EPIORDER", "ADMIMETH", "ADMISORC")
+                %in% names(data))) {
+    mutate(data, ADMIDATE_FILLED = case_when(!is.na(ADMIDATE) ~ ADMIDATE,
+                                             is.na(ADMIDATE) &
+                                               !is.na(EPISTART) &
+                                               EPIORDER == 1 &
+                                               !(ADMIMETH %in% c(67,81)) &
+                                               !(ADMISORC %in% c(51,52,53)) ~ EPISTART))
+  } else {
+    data
+  })
+}
+
+
+# Derive EPIBAD column, by assessing whether an episode was less than a day.
+# Requires a dataframe.
+# Returns a modified dataframe.
+derive_epibad <- function(data) {
+  return(mutate_if_present(data, cols = "EPIDUR_CALC", 
+                           fn = list(EPIBAD = ~case_when(EPIDUR_CALC < 0 ~ TRUE,
+                                                    TRUE ~ FALSE))))
+}
+
+
+# Derive DOD_FILLED column, by assessing whether DOD is present or missing.
+# If missing but DOR is present, impute DOD from DOR
+# Requires a dataframe.
+# Returns a modifed dataframe.
+derive_dod_filled <- function(data) {
+  return(if(all(c("DOD", "DOR")
+                %in% names(data))) {
+    mutate(data, DOD_FILLED = case_when(!is.na(DOD) ~ DOD,
+                                        is.na(DOD) & !is.na(DOR) ~ DOR))
+  } else {
+    data
+  })
+}
+
+# Derive EPIDUR_CALC column, by calculating the 
+# Requires a dataframe.
+# Returns a modifed dataframe.
+derive_epidur_calc <- function(data) {
+  return(if(all(c("EPISTART", "EPIEND")
+                %in% names(data))) {
+    mutate(data, EPIDUR_CALC = as.numeric(as.Date(EPIEND, format = "%Y-%m-%d") 
+                                          - as.Date(EPISTART, format = "%Y-%m-%d")))
+  } else {
+    data
+  })
+}
+
 # Derives additional columns for all HES datasets.
 # Requires a dataframe and a filename.
 # Returns a modified dataframe.
-derive_HES <- function(data, filename) {
+derive_HES <- function(data, filename, tidy_log) {
   APC_cols <- c(c("ADMIMETH", "ADMISORC", "DISDEST", "DISMETH", "STARTAGE", "MAINSPEF",
                 "TRETSPEF", "SITETRET", "OPERTN_01"),
-                generate_numbered_headers("DIAG_", 14))
+                generate_numbered_headers(string = "DIAG_", n = 14))
   AE_cols <- c(c("AEARRIVALMODE", "AEATTENDCAT", "AEATTENDDISP", "AEDEPTTYPE", 
                  "ARRIVALAGE", "ARRIVALTIME","CONCLTIME", "DEPTIME", "INITTIME"), 
-               generate_numbered_headers("INVEST_", 12), 
-               generate_numbered_headers("TREAT_", 12))
+               generate_numbered_headers(string = "INVEST_", n = 12), 
+               generate_numbered_headers(string = "TREAT_", n = 12))
   OP_cols <- c("APPTAGE", "FIRSTATT", "OUTCOME", "PRIORITY", "REFSOURC", "SERVTYPE",
                "SITETRET", "STAFFTYP")
   return(data %>%
            derive_extract(filename) %>%
-           derive_missing("ENCRYPTED_HESID", "ENCRYPTED_HESID_MISSING") %>%
-           derive_missing("ARRIVALDATE", "ARRIVALDATE_MISSING") %>%
-           derive_missing("ADMIDATE", "ADMIDATE_MISSING") %>%
-           derive_missing("APPTDATE", "APPTDATE_MISSING") %>%
+           derive_missing(missing_col = "ENCRYPTED_HESID", new_col = "ENCRYPTED_HESID_MISSING", tidy_log) %>%
+           derive_missing(missing_col = "ARRIVALDATE", new_col = "ARRIVALDATE_MISSING", tidy_log) %>%
+           derive_missing(missing_col = "APPTDATE", new_col = "APPTDATE_MISSING", tidy_log) %>%
            derive_ethnicity() %>%
            derive_procode3() %>%
-           derive_missing("PROCODE3", "PROCODE3_MISSING") %>%
+           derive_missing(missing_col = "PROCODE3", new_col = "PROCODE3_MISSING", tidy_log) %>%
            derive_row_quality(APC_cols) %>%
            derive_row_quality(AE_cols) %>%
-           derive_row_quality(OP_cols))
+           derive_row_quality(OP_cols) %>%
+           derive_transit() %>%
+           derive_admidate_filled() %>%
+           derive_missing(missing_col = "ADMIDATE_FILLED", new_col = "ADMIDATE_MISSING", tidy_log) %>%
+           derive_epidur_calc() %>% 
+           derive_epibad() %>%
+           derive_new(cols = AE_cols, new_col = "DUPLICATE", v = FALSE) %>%
+           derive_new(cols = APC_cols, new_col = "DUPLICATE", v = FALSE) %>%
+           derive_new(cols = OP_cols, new_col = "DUPLICATE", v = FALSE) %>%
+           derive_new(cols = c("AEATTENDCAT", "DUPLICATE"), new_col = "UNPLANNED", v = FALSE) %>% 
+           derive_new(cols = c("AEATTENDDISP", "DUPLICATE"), new_col = "SEEN", v = FALSE) %>% 
+           derive_new(cols = c("AEATTENDCAT", "DUPLICATE", "UNPLANNED", "SEEN"), 
+                      new_col = "UNPLANNED_SEEN", v = FALSE))
 }
 
