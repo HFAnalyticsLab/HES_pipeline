@@ -92,7 +92,7 @@ identify duplicate records (comparing_arrivaltime_across_days.md)
 
 ### Derived variables 
 
-Derived variables are documentet in [derived variables](doc/derived_variables.md)
+Derived variables are documented in [derived variables](doc/derived_variables.md).
 
 ## How does it work?
 
