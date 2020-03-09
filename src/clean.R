@@ -12,39 +12,39 @@ mutate_if_present <- function(data, cols, fn) {
 }
 
 
-# Parse list of columns (or single column) converting a specifc value to NA
-# Requires a dataframe, a list of columns as strings and a value to convert
+# Parse columns (or single column) converting a specifc value to NA
+# Requires a dataframe, a vector of column names as strings and a value to convert
 # to NA.
 # Returns a modified dataframe.
-convert_to_NA <- function(data, list_of_cols, v) {
-  return(data %>% mutate_if_present(list_of_cols, ~na_if(., v)))
+convert_to_NA <- function(data, cols, v) {
+  return(data %>% mutate_if_present(cols, ~na_if(., v)))
 }
 
 
-# Parse a list of columns (or single column) converting strings to date format, 
+# Parse columns (or single column) converting strings to date format, 
 # e.g. 2010-31-01.
-# Requires  a dataframe, a list of columns as strings and a date format e.g. "%Y%m%d.
+# Requires  a dataframe, a vector of column names as strings and a date format e.g. "%Y%m%d.
 # Returns a modified dataframe.
-convert_date <- function(data, list_of_cols) {
-  return(data %>% mutate_if_present(list_of_cols, as.Date))
+convert_date <- function(data, cols) {
+  return(data %>% mutate_if_present(cols, as.Date))
 }
 
 
-# Parse a list of columns (or single column) converting values to integers.
-# Requires  a dataframe, and a list of columns as strings.
+# Parse columns (or single column) converting values to integers.
+# Requires  a dataframe, and a vector of column names as strings.
 # Returns a modified dataframe.
-convert_to_int <- function(data, list_of_cols) {
-  return(mutate_if_present(data, list_of_cols, as.integer))
+convert_to_int <- function(data, cols) {
+  return(mutate_if_present(data, cols, as.integer))
 }
 
 
-# Parse a list of columns (or single column) converting a list of values (or single
-# value) to a new list of values (or single value).
-# Requires a dataframe, a list of columns as strings, a list of values to be replaced 
-# and a list of values to replace with.
+# Parse columns (or single column) converting a set of values (or single
+# value) to a new set of values (or single value).
+# Requires a dataframe, a vector of column names as strings, a vector of values to be replaced 
+# and a vector of values to replace with.
 # Returns a modified dataframe.
-convert_vals <- function(data, list_of_cols, old_vals, new_vals) {
-  return(data %>% mutate_if_present(list_of_cols, ~plyr::mapvalues(., old_vals, new_vals)))
+convert_vals <- function(data, cols, old_vals, new_vals) {
+  return(data %>% mutate_if_present(cols, ~plyr::mapvalues(., old_vals, new_vals)))
 }
 
 
