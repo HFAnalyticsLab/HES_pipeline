@@ -40,9 +40,9 @@ collect_filenames <- function(dir_path) {
 # Returns a datatable with a single column.
 collect_rows <- function(file_path, HESID, header) {
   if(HESID %in% names(header)) {
-    rows <- fread(file=file_path, sep="|", header=TRUE, verbose = TRUE, select = "ENCRYPTED_HESID")
+    rows <- fread(file = file_path, sep = "|", header = TRUE, verbose = TRUE, select = "ENCRYPTED_HESID")
   } else {
-    rows <- fread(file=file_path, sep="|", header=TRUE, verbose = TRUE, select = 1)
+    rows <- fread(file = file_path, sep = "|", header = TRUE, verbose = TRUE, select = 1)
   }
   return(rows)
 }
@@ -60,7 +60,7 @@ filter_headers <- function(expected_headers, table_name) {
 # Turn header table into character list
 # Requires a table of expected headers and a table name as a string
 # Returns a character list
-list_headers <- function(expected_headers, table_name) {
+list_headers <- function(expected_headers) {
   return(as.character(unlist(expected_headers %>%
                                dplyr::select("colnames")), use.names = FALSE))
 }
@@ -70,21 +70,15 @@ list_headers <- function(expected_headers, table_name) {
 # Requires a valid raw data file path, a table of expected headers and classes, a chunk size, a 
 # row number to skip to, a tidylog location and a boolean if coercion is required.
 # Returns a dataframe.
-read_HES <- function(file_path, header, chunk_size, chunk, tidy_log, coerce) {
-  start_reading <- Sys.time()
+read_HES <- function(file_path, header, chunk_size, chunk, coerce) {
   if(isTRUE(coerce)) {
-    data <- fread(file = file_path, sep="|", header=FALSE, col.names = list_headers(header)
-                  , verbose = TRUE, nrows = chunk_size, skip = chunk, na.strings = c("",NULL,"Null","null"),
+    data <- fread(file = file_path, sep = "|", header = FALSE, col.names = list_headers(header), 
+                  verbose = TRUE, nrows = chunk_size, skip = chunk, na.strings = c("",NULL,"Null","null"),
                   colClasses = as.vector(header$type))
   } else {
-    data <- fread(file = file_path, sep="|", header=FALSE, col.names = list_headers(header)
-                  , verbose = TRUE, nrows = chunk_size, skip = chunk, na.strings = c("",NULL,"Null","null"))
+    data <- fread(file = file_path, sep = "|", header = FALSE, col.names = list_headers(header), 
+                  verbose = TRUE, nrows = chunk_size, skip = chunk, na.strings = c("",NULL,"Null","null"))
   }
-  finish_reading <- Sys.time()
-  log_info("{paste(as.integer(chunk_size/1000000))}m lines processed in {paste(as.integer(difftime(finish_reading, start_reading, units = 'secs')))} seconds")
-  sink(tidy_log, append = TRUE)
-  cat(paste0("Logging cleaning of lines ", chunk, " to ", (chunk + chunk_size), " of ", file_path, "\n"))
-  sink()
   return(data)
 }
 
@@ -96,20 +90,20 @@ read_HES <- function(file_path, header, chunk_size, chunk, tidy_log, coerce) {
 read_ONS <- function(filenames, expected_headers, tidy_log, coerce) {
   ons <- filenames[grep("BF", filenames, invert = TRUE)]
   bridge <- filenames[grep("BF", filenames)]
-  ons_header <- fread(file = ons, sep="|", header=FALSE, nrows = 1) %>%
-    mutate_all(funs(toupper)) %>%
+  ons_header <- fread(file = ons, sep = "|", header = FALSE, nrows = 1) %>%
+    mutate_all(toupper) %>%
     unlist(use.names = FALSE)
-  bridge_header <- fread(file = bridge, sep="|", header=FALSE, nrows = 1) %>%
-    mutate_all(funs(toupper)) %>%
+  bridge_header <- fread(file = bridge, sep = "|", header = FALSE, nrows = 1) %>%
+    mutate_all(toupper) %>%
     unlist(use.names = FALSE)
-  ons_expected_header <- filter_headers(expected_headers, "ONS")
-  bridge_expected_header <- filter_headers(expected_headers, "ONS_BF")
-  check_headers(ons, ons_header, ons_expected_header)
-  check_headers(bridge, bridge_header, bridge_expected_header)
-  ons_data <- read_HES(file_path = ons, header = ons_expected_header, chunk_size = Inf, 
-                       chunk = 1, tidy_log = tidy_log, coerce = coerce)
-  bridge_data <- read_HES(file_path = bridge, header = bridge_expected_header, chunk_size = Inf, 
-                          chunk = 1, tidy_log = tidy_log, coerce = coerce)
+  ons_expected_header <- filter_headers(expected_headers, table_name = "ONS")
+  bridge_expected_header <- filter_headers(expected_headers, table_name = "ONS_BF")
+  check_headers(file_path = ons, header = ons_header, filtered_header = ons_expected_header)
+  check_headers(file_path = bridge, header = bridge_header, filtered_header = bridge_expected_header)
+  ons_data <- read_HES(file_path = ons, header = ons_expected_header, chunk_size = 1e+06, 
+                       chunk = 1, coerce = coerce)
+  bridge_data <- read_HES(file_path = bridge, header = bridge_expected_header, chunk_size = 1e+06, 
+                          chunk = 1, coerce = coerce)
   merge_data <- merge(ons_data, bridge_data, by = "RECORD_ID", all.x = TRUE)
 }
 
@@ -120,16 +114,20 @@ read_ONS <- function(filenames, expected_headers, tidy_log, coerce) {
 # boolean if coercion is required and a database object.
 # Writes to database
 read_write_ONS <- function(filenames, expected_headers, tidy_log, coerce, database_name) {
+  sink(tidy_log, append = TRUE)
+  cat(paste0("Logging cleaning of ONS files.\n"))
+  sink()
   start_dataset <- Sys.time()
   ons_files <- filenames$ons
-  data <- read_ONS(ons_files, expected_headers, tidy_log, coerce) %>%
+  data <- read_ONS(filenames = ons_files, expected_headers, tidy_log, coerce) %>%
     parse_HES() %>%
-    derive_extract(ons_files[grep("BF", ons_files, invert = TRUE)]) %>%
-    derive_missing("ENCRYPTED_HESID", "ENCRYPTED_HESID_MISSING")
-  dbWriteTable(database_name, "ONS", data, overwrite = TRUE)
+    derive_extract(filename = ons_files[grep("BF", ons_files, invert = TRUE)]) %>%
+    derive_missing(missing_col = "ENCRYPTED_HESID", new_col = "ENCRYPTED_HESID_MISSING", tidy_log) %>% 
+    derive_dod_filled()
+
+  dbWriteTable(conn = database_name, name = "ONS", value = data, overwrite = TRUE)
   finish_dataset <- Sys.time()
-  log_info("Read in dataset: {dataset_code} in 
-           {paste(as.integer(difftime(finish_dataset, start_dataset, units = 'mins')))} minutes")
+  log_info("Read in dataset: ONS in {paste(as.integer(difftime(finish_dataset, start_dataset, units = 'mins')))} minutes")
 }
 
 
@@ -140,10 +138,17 @@ read_write_ONS <- function(filenames, expected_headers, tidy_log, coerce, databa
 # Writes to database
 read_write_HES <- function(chunk, file_path, header, chunk_size, database_name, table_name,
                            tidy_log, coerce) {
-  data <- read_HES(file_path, header, chunk_size, chunk, tidy_log, coerce) %>%
+  sink(tidy_log, append = TRUE)
+  cat(paste0("Logging cleaning of lines ", chunk, " to ", (chunk + chunk_size), " of ", file_path, "\n"))
+  sink()
+  start_reading <- Sys.time()
+  data <- read_HES(file_path, header, chunk_size, chunk, coerce) %>%
     parse_HES() %>%
-    derive_HES(file_path)
-  dbWriteTable(database_name, table_name, data, append = TRUE)
+    derive_HES(filename = file_path, tidy_log)
+  dbWriteTable(conn = database_name, name = table_name, value = data, append = TRUE)
+  finish_reading <- Sys.time()
+  log_info("{paste(as.integer(chunk_size/1000000))}m lines processed in {paste(as.integer(difftime(finish_reading, start_reading, units = 'secs')))} seconds")
+  
 }
 
 
@@ -170,15 +175,16 @@ check_headers <- function(file_path, header, filtered_header) {
 # Returns a datatable with a single column for IDs. 
 ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, expected_headers, tidy_log, coerce) {
   start_ingest <- Sys.time()
-  header <- fread(file = file_path, sep="|", header=FALSE, nrows = 1) %>%
+  header <- fread(file = file_path, sep = "|", header = FALSE, nrows = 1) %>%
     mutate_all(toupper) %>%
     unlist(use.names = FALSE)
   filtered_header <- filter_headers(expected_headers, table_name)
   check_headers(file_path, header, filtered_header)
-  rows <- collect_rows(file_path, "ENCRYPTED_HESID", header) 
+  rows <- collect_rows(file_path, HESID = "ENCRYPTED_HESID", header) 
   line_count <- nrow(rows)
   chunks <- seq(1, line_count, chunk_size)
-  walk(chunks, read_write_HES, file_path, filtered_header, chunk_size, database_name, table_name, tidy_log, coerce)
+  walk(chunks, read_write_HES, file_path, header = filtered_header, chunk_size, database_name, table_name, tidy_log, 
+       coerce)
   finish_ingest <- Sys.time()
   log_info("Read in file: {file_path} consisting of {line_count} rows in 
            {paste(as.integer(difftime(finish_ingest, start_ingest, units = 'mins')))} minutes")
@@ -209,8 +215,9 @@ collect_dataset_files <- function(files, dataset_code) {
 # Returns a vector of IDs
 read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expected_headers, tidy_log, coerce) {
   start_dataset <- Sys.time()
-  files <- collect_dataset_files(all_files, dataset_code)
-  IDs <- unlist(map(files, ingest_HES_file, dataset_code, chunk_size, database, expected_headers, tidy_log, coerce), 
+  files <- collect_dataset_files(files  = all_files, dataset_code)
+  IDs <- unlist(map(files, ingest_HES_file, table_name = dataset_code, chunk_size, database_name = database, 
+                    expected_headers, tidy_log, coerce), 
                 use.names = FALSE) 
   finish_dataset <- Sys.time()
   log_info("Read in dataset: {dataset_code} in 
