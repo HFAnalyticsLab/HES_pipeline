@@ -22,6 +22,7 @@ create_dataset_summary_stats <- function(db, data_set_codes, time) {
   
   datasets$DATASET = data_set_codes
   datasets$RUNTIME = time
+  datasets <- datasets[, RUNTIME:=as.character(RUNTIME)]
   return(datasets)
 }
 
@@ -47,6 +48,7 @@ create_file_summary_stats <- function(db, data_set_codes, time) {
   }
   
   files$RUNTIME = time
+  files <- files[, RUNTIME:=as.character(RUNTIME)]
   return(files)
 }
 
