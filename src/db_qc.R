@@ -1,5 +1,4 @@
-library(DBI)
-source("src/clean.R")
+
 
 # Creates a datatable of summary stats for each dataset 
 # processed by the pipeline.
@@ -11,17 +10,18 @@ create_dataset_summary_stats <- function(db, data_set_codes, time) {
   
   for (t in data_set_codes) {
     if ("DUPLICATE" %in% dbListFields(db, t)) { 
-      row <- dbGetQuery(db, paste("SELECT COUNT() AS NO_RECORDS, SUM(DUPLICATE) 
-      AS NO_DUPLICATES, 100*(SUM(DUPLICATE)/COUNT()) AS PCT_DUPLICATE FROM ", t))
+      row <- dbGetQuery(db, paste0("SELECT COUNT() AS NO_RECORDS, SUM(DUPLICATE) 
+      AS NO_DUPLICATES, 100*(SUM(DUPLICATE)/COUNT()) AS PCT_DUPLICATES FROM ", t))
     } else {
-      row <- dbGetQuery(db, paste("SELECT COUNT() AS NO_RECORDS FROM ", t))
-      row$NO_DUPLICATES = "NA"
-    }
+      row <- dbGetQuery(db, paste0("SELECT COUNT() AS NO_RECORDS FROM ", t))
+      row$NO_DUPLICATES <- NA
+      row$PCT_DUPLICATES <- NA    
+      }
     datasets <- rbind(datasets,row)
   }
   
-  datasets$DATASET = data_set_codes
-  datasets$RUNTIME = time
+  datasets$DATASET <- data_set_codes
+  datasets$RUNTIME <- as.character(time)
   return(datasets)
 }
 
@@ -32,22 +32,22 @@ create_dataset_summary_stats <- function(db, data_set_codes, time) {
 # data set codes = and date-time.
 # Returns a datatable
 create_file_summary_stats <- function(db, data_set_codes, time) {
-  files <- data.frame()
+  combined_table <- data.frame()
   
   for (t in data_set_codes) {
     if ("DUPLICATE" %in% dbListFields(db, t)) {
-      row <- dbGetQuery(db, paste("SELECT COUNT() AS NO_RECORDS,SUM(DUPLICATE) 
-      AS NO_DUPLICATES, 100*(SUM(DUPLICATE)/COUNT()) AS PCT_DUPLICATE FROM", t, " GROUP BY FILENAME"))
+      table <- dbGetQuery(db, paste0("SELECT COUNT() AS NO_RECORDS, SUM(DUPLICATE) 
+      AS NO_DUPLICATES, 100*(SUM(DUPLICATE)/COUNT()) AS PCT_DUPLICATES, FILENAME FROM ", t, " GROUP BY FILENAME"))
     } else {
-      row <- dbGetQuery(db, paste("SELECT COUNT() AS NO_RECORDS FROM ", t, " GROUP BY FILENAME"))
-      row$NO_DUPLICATES = "NA"
+      table <- dbGetQuery(db, paste0("SELECT COUNT() AS NO_RECORDS, FILENAME FROM ", t, " GROUP BY FILENAME"))
+      table$NO_DUPLICATES <- NA
+      table$PCT_DUPLICATES <- NA     
     }
-    row[3] <- dbGetQuery(db, paste("SELECT DISTINCT FILENAME FROM ", t))
-    files <- rbind(files,row)
+    combined_table <- rbind(combined_table,table)
   }
   
-  files$RUNTIME = time
-  return(files)
+  combined_table$RUNTIME <- as.character(time)
+  return(combined_table)
 }
 
 
@@ -56,7 +56,7 @@ create_file_summary_stats <- function(db, data_set_codes, time) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_is_null_query <- function(db, table, var) {
-  dbGetQuery(db, paste("SELECT COUNT() AS NO_MISSING FROM ", table, " WHERE ", var, " IS NULL"))
+  dbGetQuery(db, paste0("SELECT COUNT() AS NO_MISSING FROM ", table, " WHERE ", var, " IS NULL"))
 }
 
 # SQL query to calculate the percentage of missing values in a variable.
@@ -64,7 +64,7 @@ variable_is_null_query <- function(db, table, var) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_pct_null_query <- function(db, table, var) {
-  dbGetQuery(db, paste("SELECT 100*COUNT() / (SELECT COUNT() FROM ", 
+  dbGetQuery(db, paste0("SELECT 100*COUNT() / (SELECT COUNT() FROM ", 
   table, " WHERE ", var, " IS NULL) AS PCT_MISSING FROM ", table))
 }
 
