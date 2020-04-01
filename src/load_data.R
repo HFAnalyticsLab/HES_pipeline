@@ -1,11 +1,3 @@
-library(data.table)
-library(plyr)
-library(tidyverse)
-library(DBI)
-library(logger)
-source("src/clean.R")
-library(tidylog)
-source("src/derive.R")
 
 
 # Generate log file to write to using datetime as a prefix.
@@ -68,7 +60,7 @@ list_headers <- function(expected_headers) {
 
 # Read in a chunk of a HES file, coercing data types if required.
 # Requires a valid raw data file path, a table of expected headers and classes, a chunk size, a 
-# row number to skip to, a tidylog location and a boolean if coercion is required.
+# row number to skip to, a tidylog location and a boolean indicating if coercion is required.
 # Returns a dataframe.
 read_HES <- function(file_path, header, chunk_size, chunk, coerce) {
   if(isTRUE(coerce)) {
@@ -134,17 +126,31 @@ read_write_ONS <- function(filenames, expected_headers, tidy_log, coerce, databa
 # Read in a chunk of a HES file and write to SQLite database.
 # Requires a valid raw data file path, vector of expected headers, a chunk size, a row 
 # number to skip to, a database object, a string referring to a table name. a vector
-# of columns and data classes, a tidylog location and a boolean if coercion is required.
-# Writes to database
+# of columns and data classes, a tidylog location, a boolean if coercion 
+# is required,  a boolean indicating whether to flag duplicate records,
+# a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
+# Writes to database as side effect.
+# Returns nothing.
 read_write_HES <- function(chunk, file_path, header, chunk_size, database_name, table_name,
-                           tidy_log, coerce) {
+                           tidy_log, IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
   sink(tidy_log, append = TRUE)
   cat(paste0("Logging cleaning of lines ", chunk, " to ", (chunk + chunk_size), " of ", file_path, "\n"))
   sink()
   start_reading <- Sys.time()
   data <- read_HES(file_path, header, chunk_size, chunk, coerce) %>%
     parse_HES() %>%
-    derive_HES(filename = file_path, tidy_log)
+    derive_HES(filename = file_path, table_name, tidy_log, duplicates, rowquality_cols, duplicate_cols)
+  if("LSOA11" %in% names(data)) {
+    if(!is.null(IMD_data)) {
+      data <- left_join(data, IMD_data, by = "LSOA11")
+    }
+    if(!is.null(CCG_data)) {
+      data <- left_join(data, CCG_data, by = c("LSOA11" = "LSOA11CD"))
+    }
+  }
+  
   dbWriteTable(conn = database_name, name = table_name, value = data, append = TRUE)
   finish_reading <- Sys.time()
   log_info("{paste(as.integer(chunk_size/1000000))}m lines processed in {paste(as.integer(difftime(finish_reading, start_reading, units = 'secs')))} seconds")
@@ -170,10 +176,15 @@ check_headers <- function(file_path, header, filtered_header) {
 # to iterate of the file, reading in in chunks and writing directly to the database
 # Requires a valid raw data file path, a table name to create if needed, and write to the database,
 # the number of rows per chunks as an integer, the name of a S4 MySQLConnection, a dataframe of 
-# expected headers, a vector of columns and data classes, a tidylog location and a boolean if coercion is required.
+# expected headers, a vector of columns and data classes, a tidylog location, a boolean if coercion 
+# is required,  a boolean indicating whether to flag duplicate records,
+# a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
-# Returns a datatable with a single column for IDs. 
-ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, expected_headers, tidy_log, coerce) {
+# Returns nothing. 
+ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, expected_headers, tidy_log,
+                            CCG_data, IMD_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
   start_ingest <- Sys.time()
   header <- fread(file = file_path, sep = "|", header = FALSE, nrows = 1) %>%
     mutate_all(toupper) %>%
@@ -184,7 +195,7 @@ ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, ex
   line_count <- nrow(rows)
   chunks <- seq(1, line_count, chunk_size)
   walk(chunks, read_write_HES, file_path, header = filtered_header, chunk_size, database_name, table_name, tidy_log, 
-       coerce)
+       IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols)
   finish_ingest <- Sys.time()
   log_info("Read in file: {file_path} consisting of {line_count} rows in 
            {paste(as.integer(difftime(finish_ingest, start_ingest, units = 'mins')))} minutes")
@@ -210,14 +221,32 @@ collect_dataset_files <- function(files, dataset_code) {
 # Processes entire HES dataset, by reading in all similar files and writing to a table in the 
 # database. Collects IDs for entire dataset.
 # Requires a dataset code character string, the number of rows per chunks as an integer, a vector of filenames, an S4 MySQLConnection, a table of
-# expected headers, a tidylog location and a boolean if coercion is required.
+# expected headers, a tidylog location, a boolean if coercion is required, 
+# a boolean indicating whether to flag duplicate records,
+# a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
 # Returns a vector of IDs
-read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expected_headers, tidy_log, coerce) {
+read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expected_headers, tidy_log, 
+                             IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
   start_dataset <- Sys.time()
   files <- collect_dataset_files(files  = all_files, dataset_code)
-  IDs <- unlist(map(files, ingest_HES_file, table_name = dataset_code, chunk_size, database_name = database, 
-                    expected_headers, tidy_log, coerce), 
+  
+  log_info(paste0("Started reading in dataset: {dataset_code}.\n"))
+  
+  if(duplicates == TRUE){
+    log_info(paste0("'ROWQUALITY' for dataset ", dataset_code, 
+                  " is based on columns ", str_c(rowquality_cols[[dataset_code]], collapse = ', '), 
+                  ".'\nDUPLICATE for dataset ", dataset_code, " is based on columns ", 
+                  str_c(duplicate_cols[[dataset_code]]$group, collapse = ', '),
+                  " and flagged by descending order of columns ", 
+                  str_c(duplicate_cols[[dataset_code]]$order, collapse = ', '), ".\n"))
+  }
+  
+  IDs <- unlist(map(files, ingest_HES_file, table_name = dataset_code, chunk_size, 
+                    database_name = database, expected_headers, tidy_log, 
+                    CCG_data, IMD_data, coerce, duplicates, rowquality_cols, duplicate_cols), 
                 use.names = FALSE) 
   finish_dataset <- Sys.time()
   log_info("Read in dataset: {dataset_code} in 
@@ -225,3 +254,46 @@ read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expe
   return(IDs)
 }
 
+
+# Loads publically available Indices of Multiple Deprivation (IMD).
+# Only loads relevant columns ("LSOA code (2011)", "Index of 
+# Multiple Deprivation (IMD) Rank (where 1 is most deprived)", 
+# "Index of Multiple Deprivation (IMD) Decile (where 1 is most 
+# deprived 10% of LSOAs)").
+# Requires a filepath.
+# Returns a datatable.
+load_IMD <- function(file) {
+  fread(file = file,  header = TRUE) %>%
+    select(starts_with('LSOA code'),
+           contains('Index of Multiple Deprivation (IMD) Rank'),
+           contains('Index of Multiple Deprivation (IMD) Decile'))
+}
+
+
+# Loads 2015 and 2019 Indices of Multiple Deprivation (IMD) and
+# joins them on LSOA.
+# Requires two filepaths for 2015 & 2019 data.
+# Returns a datatable.
+load_IMDs <- function(IMD_15_csv, IMD_19_csv) {
+  IMD_15 <- load_IMD(IMD_15_csv)
+  names(IMD_15) <- c("LSOA11", "IMD15_RANK", "IMD15_DECILE")
+  IMD_19 <- load_IMD(IMD_19_csv)
+  names(IMD_19) <- c("LSOA11", "IMD19_RANK", "IMD19_DECILE")
+  return(full_join(IMD_15, IMD_19, by = "LSOA11"))
+}
+
+
+# Loads CCG data from "Changes to CCG-DCO-STP mappings over time" NHS dataset
+# Only loads LSOA and CCG columns.
+# Drops first three summary rows.
+# Replace column names with fourth row.
+# Requires a filepath.
+# Returns a datatable.
+load_health_systems_data <- function(file) {
+  data <- read_xlsx(path = file, 
+                   sheet = "LSOA to CCG", 
+                   cell_cols("A:L"), 
+                   col_names = FALSE)[-c(1:3),]
+  names(data) <- data[1,]
+  return(data[-c(1),])
+}
