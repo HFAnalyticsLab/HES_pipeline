@@ -1,11 +1,3 @@
-library(tidyverse)
-library(tidylog)
-library(rlang)
-source("src/clean.R")
-
-library(furrr)
-plan(multiprocess)
-
 
 # Derive column containing filename data was extracted from.
 # Requires a dataframe and a filename as a string.
@@ -28,8 +20,8 @@ derive_new <- function(data, cols, new_col, v) {
 
 
 # Derive a column flagging missing data in another column.
-# Requires a dataframe, a column to check for NAs and a new column 
-# name, both as strings.
+# Requires a dataframe, a column to check for NAs, a new column 
+# name, both as strings and a log file as a string.
 # NB tidylog::mutate cannot be used here because of the way the arguments
 # are passed. Logging of new variables therefore added manually. 
 # Returns a modified dataframe.
@@ -83,13 +75,15 @@ derive_procode3 <- function(data) {
 # Returns a modifed dataframe.
 derive_row_quality <- function(data, cols) {
   if(all(cols %in% names(data))) {
-    mutate(data, ROWQUALITY = data %>%
+    data <-  data %>% 
+      mutate(ROWQUALITY = data %>%
              dplyr::select(one_of(cols)) %>%
              future_map(function(x) !is.na(x)) %>%
              future_pmap_dbl(sum))
   } else {
     data
   }
+  return(data)
 }
 
 
@@ -147,9 +141,9 @@ derive_admidate_filled <- function(data) {
 # Derive EPIBAD column, by assessing whether an episode was less than a day.
 # Requires a dataframe.
 # Returns a modified dataframe.
-derive_epibad <- function(data) {
+derive_epi_bad <- function(data) {
   return(mutate_if_present(data, cols = "EPIDUR_CALC", 
-                           fn = list(EPIBAD = ~case_when(EPIDUR_CALC < 0 ~ TRUE,
+                           fn = list(EPI_BAD = ~case_when(EPIDUR_CALC < 0 ~ TRUE,
                                                     TRUE ~ FALSE))))
 }
 
@@ -181,41 +175,66 @@ derive_epidur_calc <- function(data) {
   })
 }
 
+# Derive EPI_VALID column, by defining where an episode is valid.
+# Requires a dataframe.
+# Returns a modifed dataframe.
+derive_epi_valid <- function(data) {
+  return(if(all(c("ENCRYPTED_HESID_MISSING", "ADMIDATE_MISSING", "PROCODE3_MISSING",
+                  "EPISTAT", "EPIKEY", "EPISTART", "EPIEND") %in% names(data))) {
+    mutate(data, EPI_VALID = ifelse(ENCRYPTED_HESID_MISSING == FALSE &
+                                    ADMIDATE_MISSING == FALSE &
+                                    PROCODE3_MISSING == FALSE &
+                                    EPISTAT == 3 &
+                                    !is.na(EPIKEY) &
+                                    !is.na(EPISTART) &
+                                    !is.na(EPIEND), TRUE, FALSE))
+  } else {
+    data
+  })
+}
+
+
+
 # Derives additional columns for all HES datasets.
-# Requires a dataframe and a filename.
+# Requires a dataframe, a filename as a string, a log file as a string,
+# a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Returns a modified dataframe.
-derive_HES <- function(data, filename, tidy_log) {
-  APC_cols <- c(c("ADMIMETH", "ADMISORC", "DISDEST", "DISMETH", "STARTAGE", "MAINSPEF",
-                "TRETSPEF", "SITETRET", "OPERTN_01"),
-                generate_numbered_headers(string = "DIAG_", n = 14))
-  AE_cols <- c(c("AEARRIVALMODE", "AEATTENDCAT", "AEATTENDDISP", "AEDEPTTYPE", 
-                 "ARRIVALAGE", "ARRIVALTIME","CONCLTIME", "DEPTIME", "INITTIME"), 
-               generate_numbered_headers(string = "INVEST_", n = 12), 
-               generate_numbered_headers(string = "TREAT_", n = 12))
-  OP_cols <- c("APPTAGE", "FIRSTATT", "OUTCOME", "PRIORITY", "REFSOURC", "SERVTYPE",
-               "SITETRET", "STAFFTYP")
-  return(data %>%
-           derive_extract(filename) %>%
-           derive_missing(missing_col = "ENCRYPTED_HESID", new_col = "ENCRYPTED_HESID_MISSING", tidy_log) %>%
-           derive_missing(missing_col = "ARRIVALDATE", new_col = "ARRIVALDATE_MISSING", tidy_log) %>%
-           derive_missing(missing_col = "APPTDATE", new_col = "APPTDATE_MISSING", tidy_log) %>%
-           derive_ethnicity() %>%
-           derive_procode3() %>%
-           derive_missing(missing_col = "PROCODE3", new_col = "PROCODE3_MISSING", tidy_log) %>%
-           derive_row_quality(APC_cols) %>%
-           derive_row_quality(AE_cols) %>%
-           derive_row_quality(OP_cols) %>%
-           derive_transit() %>%
-           derive_admidate_filled() %>%
-           derive_missing(missing_col = "ADMIDATE_FILLED", new_col = "ADMIDATE_MISSING", tidy_log) %>%
-           derive_epidur_calc() %>% 
-           derive_epibad() %>%
-           derive_new(cols = AE_cols, new_col = "DUPLICATE", v = FALSE) %>%
-           derive_new(cols = APC_cols, new_col = "DUPLICATE", v = FALSE) %>%
-           derive_new(cols = OP_cols, new_col = "DUPLICATE", v = FALSE) %>%
-           derive_new(cols = c("AEATTENDCAT", "DUPLICATE"), new_col = "UNPLANNED", v = FALSE) %>% 
-           derive_new(cols = c("AEATTENDDISP", "DUPLICATE"), new_col = "SEEN", v = FALSE) %>% 
-           derive_new(cols = c("AEATTENDCAT", "DUPLICATE", "UNPLANNED", "SEEN"), 
-                      new_col = "UNPLANNED_SEEN", v = FALSE))
+
+derive_HES <- function(data, filename, table_name, tidy_log, duplicates, rowquality_cols, duplicate_cols) {
+  data <- data %>%
+    derive_extract(filename) %>%
+    derive_missing(missing_col = "ENCRYPTED_HESID", new_col = "ENCRYPTED_HESID_MISSING", tidy_log) %>%
+    derive_missing(missing_col = "ARRIVALDATE", new_col = "ARRIVALDATE_MISSING", tidy_log) %>%
+    derive_missing(missing_col = "APPTDATE", new_col = "APPTDATE_MISSING", tidy_log) %>%
+    derive_ethnicity() %>%
+    derive_procode3() %>%
+    derive_missing(missing_col = "PROCODE3", new_col = "PROCODE3_MISSING", tidy_log) %>%          
+    derive_transit() %>%
+    derive_admidate_filled() %>%
+    derive_missing(missing_col = "ADMIDATE_FILLED", new_col = "ADMIDATE_MISSING", tidy_log) %>%
+    derive_epidur_calc() %>% 
+    derive_epi_bad() %>% 
+    derive_epi_valid() %>% 
+    derive_comorbidities(table_name) %>%
+    derive_new(cols = "DISDATE", new_col = "DISDATE_MISSING", v = FALSE)
+  
+
+  if(duplicates == TRUE){
+    data <-  data %>%
+      derive_row_quality(APC_cols) %>%
+      derive_row_quality(AE_cols) %>%
+      derive_row_quality(OP_cols) %>% 
+      derive_new(cols = c(duplicate_cols$AE$group, duplicate_cols$AE$order), new_col = "DUPLICATE", v = FALSE) %>%
+      derive_new(cols = c(duplicate_cols$APC$group, duplicate_cols$APC$order), new_col = "DUPLICATE", v = FALSE) %>%
+      derive_new(cols = c(duplicate_cols$OP$group, duplicate_cols$OP$order), new_col = "DUPLICATE", v = FALSE)%>%
+      derive_new(cols = c("AEATTENDCAT", "DUPLICATE"), new_col = "UNPLANNED", v = FALSE) %>% 
+      derive_new(cols = c("AEATTENDDISP", "DUPLICATE"), new_col = "SEEN", v = FALSE) %>% 
+      derive_new(cols = c("AEATTENDCAT", "DUPLICATE", "UNPLANNED", "SEEN"), 
+               new_col = "UNPLANNED_SEEN", v = FALSE)
+    }
+
+  return(data)
 }
 
