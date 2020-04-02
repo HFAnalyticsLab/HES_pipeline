@@ -62,7 +62,7 @@ The pipeline
     + checking if all expected columns are present
     + coercing data types (optional)
     + cleaning variables 
-    + deriveing variables (based on a single row of data)
+    + deriving variables (based on a single row of data)
     + combining with public data on deprivation and CCGs (optional)
     + flags comorbidities (to be made optional)
 * flags duplicates in the database (optional)
