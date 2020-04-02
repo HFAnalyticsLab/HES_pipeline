@@ -24,7 +24,6 @@ pre-approved analysis projects work with the cleaned data sets.
 We are planning to use HES data linked to Civil Registrations (deaths) covering
 the last 10 years as well as quarterly data updated for the next three years. 
 Our data application has been approved by the NHS Digital [Data Access Request 
-Service [Data Access Request 
 Service (DARS)](https://digital.nhs.uk/services/data-access-request-service-dars) and development of this pipeline has now 
 commenced.
 
