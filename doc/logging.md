@@ -6,17 +6,19 @@ database (`database_path`):
 ## **pipeline log**
 
 This log captures: 
-* the overall progression of the pipeline run (time stamps)
-* the latest git commit to keep track of versioning
-* the file names and locations of each raw file that is being processes
-* whether or not each raw file contained expected column headers
-* the time taken to read and process each chunk, as well as the number of lines
+* pipeline version (last git commit)
+* whether the pipeline is run in build or update mode
+* file names and locations of raw data files and reference data files
+* optional arguments that were provided to the pipline function (data type coercion, duplicate flagging, comorbidity flagging)
+* individual high-level processing steps with time stamps, including 
+    + whether or not each raw file contained expected column headers
+    + the time taken to read and process each chunk, as well as the number of lines
 per chunk
-* the time taken to read and process each file and dataset
+    + the time taken to read and process each file and dataset
 * any errors that cause the pipeline to fail.
 
 ## **tidy log**
 
-For each chunk this log captures console feedback on most variable transformations, 
+This log captures detailed console feedback on most variable transformations, 
 as provided by the **tidylog** package.
 
