@@ -3,6 +3,7 @@ source("src/clean.R")
 source("src/derive.R")
 source("src/comorbidities.R")
 source("src/duplicates.R")
+source("src/spells.R")
 source("src/db_qc.R")
 
 library(data.table)
@@ -101,14 +102,50 @@ modify_database <-  function(db, duplicate_cols){
     } else {
       log_info("Did not flag duplicates in APC dataset, either because duplicate was set to FALSE or not all required columns present. 
                 Check definition of duplicates.")
-    }
-  } else {
+    }} else {
     log_info("APC dataset not updated, does not exist in the database")
   }
   log_info("Updating database complete.")
-  
 }
 
+# Creates inpatient spells and continuous inpatient spells (CIPS)
+# Requires an S4 MySQLConnection 
+# Writes to database as side effect: adds new columns to APC table, creates APCS table (spells)
+# and APCC table (CIPS)
+# Returns nothing.
+
+create_spells_cips <- function(db){
+  
+  if("APC" %in% dbListTables(db) & all(c("ENCRYPTED_HESID", "PROCODE3", "EPISTART", "EPIEND", 
+           "EPIORDER", "TRANSIT", "EPIKEY", "ADMIDATE") %in% dbListFields(db, "APC"))) {
+    
+    spell_grouping_query <- "(PARTITION BY ENCRYPTED_HESID, PROCODE3 ORDER BY EPISTART, EPIEND, EPIORDER, TRANSIT, EPIKEY)"
+    cips_grouping_query <- "(PARTITION BY ENCRYPTED_HESID ORDER BY ADMIDATE_FILLED)"
+    
+    log_info("Deriving spells and spell IDs...")
+    derive_new_spell(db, spell_grouping = spell_grouping_query)
+    derive_spell_id(db, spell_grouping = spell_grouping_query)
+    
+    log_info("Deriving spells and spell IDs complete. Creating spell table...")
+    create_inpatient_spells_table(db)
+    derive_disdate_missing(db)
+    
+    log_info("Creating spell table complete. Deriving CIPS and CIPS IDs...")
+    derive_new_cips(db, cips_grouping = cips_grouping_query)
+    derive_cips_id(db, cips_grouping = cips_grouping_query)
+    
+    log_info("Deriving CIPS and CIPS IDs complete. Creating CIPS table...")
+    create_cips_table(db)
+    log_info("Creating CIPS table complete.")
+  } else {
+    log_info("Did not create spells table, APC table not present in the database or not all columns 
+             needed to create spells present in the APC table.")
+  }
+  
+  
+}
+  
+  
 
 # Creates summary stats for each dataset, datafile and variable in the database
 # Requires an S4 MySQLConnection, a file path for the output files and date-time. 
