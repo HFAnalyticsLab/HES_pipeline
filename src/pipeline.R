@@ -306,7 +306,18 @@ remove_data_to_be_updated <- function(table, db, year) {
 # Updates the database as side effect
 # Returns nothing.
 create_backuptable <- function(table, db) {
-  dbSendQuery(db, paste0("ALTER TABLE ", table, " RENAME TO ", table, "_backup"))
+  
+  if(table == "APC"){
+    cols_to_keep <- dbListFields(db, "APC")
+    cols_to_keep <- cols_to_keep[!cols_to_keep %in% c("NEW_SPELL", "ROWCOUNT", "SPELL_ID")]
+    
+    dbExecute(db, paste0("CREATE TABLE APC_backup AS 
+                          SELECT ", str_c(cols_to_keep, collapse = ", "), " FROM APC"))
+    dbRemoveTable(db, "APC")
+  }else{
+    dbSendQuery(db, paste0("ALTER TABLE ", table, " RENAME TO ", table, "_backup"))
+    
+  }
 }
 
 
