@@ -1,6 +1,4 @@
-storing_dates_in_database.md
-
-# Storing datas in SQLite database
+# Storing dates in SQLite database
 
 ## Context
 
