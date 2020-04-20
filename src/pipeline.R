@@ -17,33 +17,38 @@ library(comorbidity)
 library(furrr)
 plan(multiprocess)
 
-
 # Main fn for building the database. Will read in, check, and clean the data, then 
 # write out to a database.
 # Requires a valid directory path to the data, a path to the database, a character 
 # vector of dataset codes, an integer vector of the number of rows per chunk for 
-# each dataset, a path to a csv of expected headers and a boolean if coercion is 
-# required, a named list of vectors defining columns used as the basis for rowquality per
+# each dataset, a path to a csv of expected headers, a tidylog location, a dataframe with IMD
+# data to be merged, a dataframe with CCG identifiers to be merged. 
+# Optional: a boolean if coercion is required, a boolean indicating whether to flag 
+# duplicate records, a boolean indicating whether to flag comorbidities.
+# Writes to database as side effect.  
+# a named list of vectors defining columns used as the basis for rowquality per
 # datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
 # Returns nothing.
 build_database <- function(data_path, db, data_set_codes, chunk_sizes, 
                            expected_headers_file, tidy_log, IMD_data, 
-                           CCG_data, coerce = FALSE, duplicates = FALSE, rowquality_cols, duplicate_cols) {
+                           CCG_data, coerce = FALSE, duplicates = FALSE, comorbidities = FALSE, 
+                           rowquality_cols, duplicate_cols) {
+  
   expected_headers <- read.csv(expected_headers_file, header = TRUE)
   filenames <- collect_filenames(dir_path = data_path)
   if (!is_empty(filenames$ons)) { read_write_ONS(filenames, expected_headers, tidy_log, coerce, database_name = db) }
-  IDs <- c(map2(data_set_codes, chunk_sizes,
-               ~read_HES_dataset(dataset_code = .x, chunk_size = .y, 
-               all_files = filenames$hes, database = db, expected_headers, tidy_log, IMD_data, 
-               CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols)))
+  walk2(data_set_codes, chunk_sizes,
+        ~read_HES_dataset(dataset_code = .x, chunk_size = .y, 
+        all_files = filenames$hes, database = db, expected_headers, tidy_log, IMD_data, 
+        CCG_data, coerce, duplicates, comorbidities, rowquality_cols, duplicate_cols))
   log_info("Database built!")
 }
 
 
 # Identifies duplicates and updates database with result
-# Requires an S4 MySQLConnection and aa named list of named lists defining 
+# Requires an S4 MySQLConnection and a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
 # Returns nothing.
@@ -191,15 +196,20 @@ load_additional_data <- function(IMD_15_csv = NULL, IMD_19_csv = NULL, CCG_xlsx 
 
 
 # Main fn for building an initial database. Will build a database and then update some columns.
-# Requires a valid directory path to the data, a path to the database, a character vector of dataset codes, 
-# an optional integer vector of the number of rows per chunk for each dataset, the path to a csv of 
-# expected headers, a boolean if coercion is required and a boolean indicating whether to flag 
-# duplicate records.
+# Requires a valid directory path to the data, a path to the database, a character vector of dataset codes
+# and the path to a csv of  expected headers, a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)). 
+# Optional: an integer vector of the number of rows per chunk for each dataset (default is 1000000 line per
+# chunk), paths to csv and xlsx files containing reference data, a boolean if coercion is required, a 
+# boolean indicating whether to flag duplicate records, a boolean indicating whether to flag 
+# comorbidities.
 # Writes to database as side effect. 
 # Returns nothing.
 run_initial <- function(data_path, database_path, data_set_codes, chunk_sizes, 
-                      expected_headers_file, IMD_15_csv, IMD_19_csv, 
-                      CCG_xlsx, coerce = FALSE, duplicates = FALSE, rowquality_cols, duplicate_cols) {
+                        expected_headers_file, IMD_15_csv, IMD_19_csv, 
+                        CCG_xlsx, coerce = FALSE, duplicates = FALSE, comorbidities = FALSE,
+                        rowquality_cols, duplicate_cols) {
   if(file.exists(paste0(database_path, "HES_db.sqlite"))) {
     already_exists_message <- "Database already exists. Did you mean to use `update = TRUE`?"
     log_info(already_exists_message)
@@ -214,6 +224,7 @@ run_initial <- function(data_path, database_path, data_set_codes, chunk_sizes,
                     ".\nReading exptected headers from: ", expected_headers_file, 
                     ".\nCoercing data types: ", coerce, 
                     ".\nFlagging duplicate records: ", duplicates,
+                    ".\nFlagging comorbidities: ", comorbidities,
                     ".\nReading additional data from: ", str_c(c(IMD_15_csv, IMD_19_csv, CCG_xlsx), collapse = ", "), ".\n"))
     
     external_data <- load_additional_data(IMD_15_csv, IMD_19_csv, CCG_xlsx)
@@ -221,8 +232,10 @@ run_initial <- function(data_path, database_path, data_set_codes, chunk_sizes,
     CCG_data <- external_data[[2]]
     
     build_database(data_path, db, data_set_codes, chunk_sizes, expected_headers_file, tidy_log,
-                   IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols)
+                   IMD_data, CCG_data, coerce, duplicates, comorbidities, rowquality_cols, duplicate_cols)
     modify_database(db, duplicate_cols)
+    create_spells_cips(db)
+    
     quality_control(db, database_path, time = run_start)
     dbDisconnect(db)
     log_info("Run complete. Database connection closed.")
@@ -272,15 +285,20 @@ join_update <- function(data_set_code, db) {
 
 
 # Updates the database with new data. Will remove data to be updated.
-# Requires a valid directory path to the data, a path to the database, a character vector of dataset codes, 
-# an optional integer vector of the number of rows per chunk for each dataset the path to a csv of 
-# expected headers, a boolean if coercion is required and a boolean indicating whether to flag 
-# duplicate records.
+# Requires a valid directory path to the data, a path to the database, a character vector of dataset codes
+# and the path to a csv of  expected headers, a named list of vectors defining columns used as the basis for rowquality per
+# datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
+# columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)). 
+# Optional: an integer vector of the number of rows per chunk for each dataset (default is 1000000 line per
+# chunk), paths to csv and xlsx files containing reference data, a boolean if coercion is required, a 
+# boolean indicating whether to flag duplicate records, a boolean indicating whether to flag 
+# comorbidities.
 # Writes to database as side effect. 
 # Returns nothing.
 run_update <- function(data_path, database_path, data_set_codes, chunk_sizes = c(1000000),
-                            expected_headers_file, IMD_15_csv = NULL, IMD_19_csv = NULL,
-                            CCG_xlsx = NULL, coerce = FALSE, duplicates = FALSE, rowquality_cols, duplicate_cols) {
+                       expected_headers_file, IMD_15_csv = NULL, IMD_19_csv = NULL,
+                       CCG_xlsx = NULL, coerce = FALSE, duplicates = FALSE,  comorbidities = FALSE,
+                       rowquality_cols, duplicate_cols) {
   run_start <- Sys.time()
   if(!file.exists(paste0(database_path, "HES_db.sqlite"))) {
     doesnt_exists_message <- "Database doesn't exist. Did you mean to use `update = FALSE`?"
@@ -311,12 +329,12 @@ run_update <- function(data_path, database_path, data_set_codes, chunk_sizes = c
     walk(data_set_codes, create_backuptable, db)
     log_info("Creating backups complete. Processing new data...")
     build_database(data_path, db, data_set_codes, chunk_sizes, expected_headers_file, tidy_log,
-                   IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols)
+                   IMD_data, CCG_data, coerce, duplicates, comorbidities, rowquality_cols, duplicate_cols)
     modify_database(db, duplicate_cols)
     log_info("Merging new data with backup tables...")
     walk(data_set_codes, join_update, db)
     log_info("Merging new data with backup tables complete.")
-    #spells
+    create_spells_cips(db)
     quality_control(db, database_path, time = run_start)
     dbDisconnect(db)
     log_info("Database update complete.")
@@ -325,15 +343,18 @@ run_update <- function(data_path, database_path, data_set_codes, chunk_sizes = c
 
 
 # Runs the pipeline or updates the database, and logs any errors thrown.
-# Requires a valid directory path to the data, a path to the database, a character vector of dataset codes, 
-# an optional integer vector of the number of rows per chunk for each dataset (default chunk size is 
-# 1,000,000 lines per chunk), the path to a csv of expected headers, a boolean if coercion is required and
-# a boolean indicating whether to flag duplicate records.
+# Requires a valid directory path to the data, a path to the database and a character vector of dataset 
+# codes and the path to a csv of expected headers. 
+# Optional arguments: an integer vector of the number of rows per chunk for each dataset (default chunk size is 
+# 1,000,000 lines per chunk), paths to csv and xlsx files containing reference data,   
+# a boolean if coercion is required, a boolean indicating whether to flag duplicate records and a
+# boolean indicating whether to flag comorbidities.
 # Writes to database as side effect.
 # Returns nothing.
 pipeline <- function(data_path, database_path, data_set_codes, chunk_sizes = c(1000000), 
                      expected_headers_file, IMD_15_csv = NULL, IMD_19_csv = NULL,
-                     CCG_xlsx = NULL, coerce = FALSE, duplicates = FALSE, update = FALSE) {
+                     CCG_xlsx = NULL, coerce = FALSE, duplicates = FALSE,  comorbidities = FALSE,
+                     update = FALSE) {
   
   # Columns used to calculate row quality (could be supplied as arguments to pipline 
   # in a future version)
@@ -360,14 +381,14 @@ pipeline <- function(data_path, database_path, data_set_codes, chunk_sizes = c(1
   tryCatch({
     if(update == FALSE) {
       run_initial(data_path, database_path, data_set_codes, chunk_sizes, expected_headers_file, 
-                IMD_15_csv, IMD_19_csv, CCG_xlsx, coerce, duplicates, 
+                IMD_15_csv, IMD_19_csv, CCG_xlsx, coerce, duplicates, comorbidities,
                 rowquality_cols = list("AE" = AE_rowquality_cols, "APC" = APC_rowquality_cols, "OP" = OP_rowquality_cols),
                 duplicate_cols = list("AE" = list("group" = AE_group_by, "order" = AE_order_by), 
                                       "APC" = list("group" = APC_group_by, "order" = APC_order_by), 
                                       "OP" = list("group" = OP_group_by, "order" = OP_order_by)))
     } else if(update == TRUE) {
       run_update(data_path, database_path, data_set_codes, chunk_sizes, expected_headers_file, 
-                 IMD_15_csv, IMD_19_csv, CCG_xlsx, coerce, duplicates, 
+                 IMD_15_csv, IMD_19_csv, CCG_xlsx, coerce, duplicates, comorbidities, 
                  rowquality_cols = list("AE" = AE_rowquality_cols, "APC" = APC_rowquality_cols, "OP" = OP_rowquality_cols),
                  duplicate_cols = list("AE" = list("group" = AE_group_by, "order" = AE_order_by), 
                                        "APC" = list("group" = APC_group_by, "order" = APC_order_by), 
