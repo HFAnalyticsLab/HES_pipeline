@@ -360,11 +360,14 @@ run_update <- function(data_path, database_path, data_set_codes, chunk_sizes = c
     filenames <- collect_filenames(dir_path = data_path)
     year <- get_file_year(filenames$hes[1])
     
+    walk(data_set_codes, collect_dataset_files, files = filenames)
+    
     log_info(paste0("Run started to update existing database.\nDeleting existing records from year: ", gsub("%", "", year), 
                     ".\nReplacing records using files from folder: ", data_path, 
                     ".\nReading exptected headers from: ", expected_headers_file, 
                     ".\nCoercing data types: ", coerce, 
                     ".\nFlagging duplicate records: ", duplicates,
+                    ".\nFlagging comorbidities: ", comorbidities,
                     ".\nReading additional data from: ", str_c(c(IMD_15_csv, IMD_19_csv, CCG_xlsx), collapse = ", "), ".\n"))
     
     external_data <- load_additional_data(IMD_15_csv, IMD_19_csv, CCG_xlsx)
