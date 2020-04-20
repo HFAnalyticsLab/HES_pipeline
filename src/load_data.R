@@ -1,5 +1,4 @@
 
-
 # Generate log file to write to using datetime as a prefix.
 # Requires a path to store the log.
 # Returns the filepath to the log file.
@@ -128,20 +127,23 @@ read_write_ONS <- function(filenames, expected_headers, tidy_log, coerce, databa
 # number to skip to, a database object, a string referring to a table name. a vector
 # of columns and data classes, a tidylog location, a boolean if coercion 
 # is required,  a boolean indicating whether to flag duplicate records,
+# a boolean indicating whether to flag comorbidities,
 # a named list of vectors defining columns used as the basis for rowquality per
 # datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
 # Returns nothing.
 read_write_HES <- function(chunk, file_path, header, chunk_size, database_name, table_name,
-                           tidy_log, IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
+                           tidy_log, IMD_data, CCG_data, coerce, duplicates, comorbidities, 
+                           rowquality_cols, duplicate_cols) {
   sink(tidy_log, append = TRUE)
   cat(paste0("Logging cleaning of lines ", chunk, " to ", (chunk + chunk_size), " of ", file_path, "\n"))
   sink()
   start_reading <- Sys.time()
   data <- read_HES(file_path, header, chunk_size, chunk, coerce) %>%
     parse_HES() %>%
-    derive_HES(filename = file_path, table_name, tidy_log, duplicates, rowquality_cols, duplicate_cols)
+    derive_HES(filename = file_path, table_name, tidy_log, duplicates, comorbidities, 
+               rowquality_cols, duplicate_cols)
   if("LSOA11" %in% names(data)) {
     if(!is.null(IMD_data)) {
       data <- left_join(data, IMD_data, by = "LSOA11")
@@ -178,13 +180,15 @@ check_headers <- function(file_path, header, filtered_header) {
 # the number of rows per chunks as an integer, the name of a S4 MySQLConnection, a dataframe of 
 # expected headers, a vector of columns and data classes, a tidylog location, a boolean if coercion 
 # is required,  a boolean indicating whether to flag duplicate records,
+# a boolean indicating whether to flag comorbidities,
 # a named list of vectors defining columns used as the basis for rowquality per
 # datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
 # Returns nothing. 
 ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, expected_headers, tidy_log,
-                            CCG_data, IMD_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
+                            CCG_data, IMD_data, coerce, duplicates, comorbidities, rowquality_cols, 
+                            duplicate_cols) {
   start_ingest <- Sys.time()
   header <- fread(file = file_path, sep = "|", header = FALSE, nrows = 1) %>%
     mutate_all(toupper) %>%
@@ -195,13 +199,11 @@ ingest_HES_file <- function(file_path, table_name, chunk_size, database_name, ex
   line_count <- nrow(rows)
   chunks <- seq(1, line_count, chunk_size)
   walk(chunks, read_write_HES, file_path, header = filtered_header, chunk_size, database_name, table_name, tidy_log, 
-       IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols)
+       IMD_data, CCG_data, coerce, duplicates, comorbidities, rowquality_cols, duplicate_cols)
   finish_ingest <- Sys.time()
   log_info("Read in file: {file_path} consisting of {line_count} rows in 
            {paste(as.integer(difftime(finish_ingest, start_ingest, units = 'mins')))} minutes")
-  if("ENCRYPTED_HESID" %in% header) {
-    return(rows)
-  }
+
 }
 
 
@@ -223,13 +225,15 @@ collect_dataset_files <- function(files, dataset_code) {
 # Requires a dataset code character string, the number of rows per chunks as an integer, a vector of filenames, an S4 MySQLConnection, a table of
 # expected headers, a tidylog location, a boolean if coercion is required, 
 # a boolean indicating whether to flag duplicate records,
+# a boolean indicating whether to flag comorbidities,
 # a named list of vectors defining columns used as the basis for rowquality per
 # datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Writes to database as side effect.
-# Returns a vector of IDs
+# Returns nothing.
 read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expected_headers, tidy_log, 
-                             IMD_data, CCG_data, coerce, duplicates, rowquality_cols, duplicate_cols) {
+                             IMD_data, CCG_data, coerce, duplicates, comorbidities, rowquality_cols, 
+                             duplicate_cols) {
   start_dataset <- Sys.time()
   files <- collect_dataset_files(files  = all_files, dataset_code)
   
@@ -244,14 +248,12 @@ read_HES_dataset <- function(dataset_code, chunk_size, all_files, database, expe
                   str_c(duplicate_cols[[dataset_code]]$order, collapse = ', '), ".\n"))
   }
   
-  IDs <- unlist(map(files, ingest_HES_file, table_name = dataset_code, chunk_size, 
-                    database_name = database, expected_headers, tidy_log, 
-                    CCG_data, IMD_data, coerce, duplicates, rowquality_cols, duplicate_cols), 
-                use.names = FALSE) 
+  walk(files, ingest_HES_file, table_name = dataset_code, chunk_size, 
+      database_name = database, expected_headers, tidy_log, 
+      CCG_data, IMD_data, coerce, duplicates, comorbidities, rowquality_cols, duplicate_cols)
   finish_dataset <- Sys.time()
   log_info("Read in dataset: {dataset_code} in 
            {paste(as.integer(difftime(finish_dataset, start_dataset, units = 'mins')))} minutes")
-  return(IDs)
 }
 
 
