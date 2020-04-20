@@ -26,5 +26,5 @@ records flagged as duplicates
 **FILE_SUMMARY_STATS** - Number of records per dataset and raw data file, percentage of 
 records flagged as duplicates   
 
-**[dataset]_SUMMARY_STATS** - Summary statistics for each variable per dataset, percentage of
+**[dataset name]_SUMMARY_STATS** - Summary statistics for each variable per dataset, percentage of
 missing variables per variable. 
