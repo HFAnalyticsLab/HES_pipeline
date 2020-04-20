@@ -5,10 +5,9 @@
 # Returns a modified dataframe.
 derive_comorbidities <- function(data, table_name){
   
-  if(table_name %in% c("AE", "APC") & any(str_detect(names(data), "DIAG_")) == TRUE){
+  if(table_name == "APC" & any(str_detect(names(data), "DIAG_")) == TRUE){
     
-    if(table_name == "AE"){id_cols = c("ENCRYPTED_HESID", "AEKEY")}
-    if(table_name == "APC"){id_cols = c("ENCRYPTED_HESID", "EPIKEY")}
+    id_cols = c("ENCRYPTED_HESID", "EPIKEY")
     
     diags <- data  %>% 
       select_at(vars(id_cols, contains("DIAG_"))) %>% 
