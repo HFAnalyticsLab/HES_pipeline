@@ -197,12 +197,15 @@ derive_epi_valid <- function(data) {
 
 # Derives additional columns for all HES datasets.
 # Requires a dataframe, a filename as a string, a log file as a string,
+# a boolean indicating whether to flag duplicates,
+# a boolean indicating whether to flag comorbidities,
 # a named list of vectors defining columns used as the basis for rowquality per
 # datasets (eg list("AE" = c(cols), ...)), a named list of named lists defining 
 # columns to use for deduplication per dataset (eg list("AE" = list("group" = cols1, "order" = cols2), ...)).
 # Returns a modified dataframe.
 
-derive_HES <- function(data, filename, table_name, tidy_log, duplicates, rowquality_cols, duplicate_cols) {
+derive_HES <- function(data, filename, table_name, tidy_log, duplicates, comorbidities,
+                       rowquality_cols, duplicate_cols) {
   data <- data %>%
     derive_extract(filename) %>%
     derive_missing(missing_col = "ENCRYPTED_HESID", new_col = "ENCRYPTED_HESID_MISSING", tidy_log) %>%
@@ -216,11 +219,8 @@ derive_HES <- function(data, filename, table_name, tidy_log, duplicates, rowqual
     derive_missing(missing_col = "ADMIDATE_FILLED", new_col = "ADMIDATE_MISSING", tidy_log) %>%
     derive_epidur_calc() %>% 
     derive_epi_bad() %>% 
-    derive_epi_valid() %>% 
-    derive_comorbidities(table_name) %>%
-    derive_new(cols = "DISDATE", new_col = "DISDATE_MISSING", v = FALSE)
+    derive_epi_valid() 
   
-
   if(duplicates == TRUE){
     data <-  data %>%
       derive_row_quality(APC_cols) %>%
@@ -233,7 +233,14 @@ derive_HES <- function(data, filename, table_name, tidy_log, duplicates, rowqual
       derive_new(cols = c("AEATTENDDISP", "DUPLICATE"), new_col = "SEEN", v = FALSE) %>% 
       derive_new(cols = c("AEATTENDCAT", "DUPLICATE", "UNPLANNED", "SEEN"), 
                new_col = "UNPLANNED_SEEN", v = FALSE)
-    }
+    
+  }
+  
+   if(comorbidities == TRUE){
+     data <-  data %>%
+       derive_comorbidities(table_name)
+   }
+
 
   return(data)
 }
