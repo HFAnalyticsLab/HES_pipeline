@@ -1,32 +1,27 @@
 # HES pipeline
 
 Open-source R pipeline to clean and process patient-level Hospital Episode 
-Statistics (HES) & ONS Civil Registrations data, with the aim to produce 
+Statistics (HES) and linked ONS mortality data, with the aim to produce 
 analysis-ready datasets for a defined programme of analyses.
 
 #### Project Status: in progress
 
 ## Project Description
 
-[Hospital Episode Statistics (HES)](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/hospital-episode-statistics) is a database containing details of all hosptial admissions, A&E attendances and outpatient appointments at NHS hospitals in England.
+[Hospital Episode Statistics (HES)](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/hospital-episode-statistics) is a database containing 
+details of all hosptial admissions, A&E attendances and outpatient appointments 
+at NHS hospitals in England.
 
-Before it can be used for analysis, HES data requires cleaning (e.g. duplicate 
-removal) and quality control as well as additional derived variables and tables. 
-The complexity of HES. the large number of variables and the size of the data 
-sets can makes this a challenging task.
+Before it can be used for analysis, HES data requires cleaning, quality control and processing to derive additional variables. The complex record structure of HES, the large number of variables and the size of the data sets makes this a challenging task both from an analytical and computational point of view.
 
-This cleaning and processing workflow will be designed to ensure that the HES
-data is processed consistently and reproducably, and that every one of our
-pre-approved analysis projects work with the cleaned data sets.
+The semi-automated cleaning and processing workflow we are developing in this repository is designed to ensure that the HES data is processed consistently and reproducibly, that the cleaning process is 
+documented and that each approved analysis projects is based on the same clean data.
 
 ## Data Source
 
-We are planning to use HES data linked to Civil Registrations (deaths) covering
-the last 10 years as well as quarterly data updated for the next three years. 
-Our data application has been approved by the NHS Digital [Data Access Request 
-Service [Data Access Request 
-Service (DARS)](https://digital.nhs.uk/services/data-access-request-service-dars) and development of this pipeline has now 
-commenced.
+We using HES data linked to ONS mortality data from 2008/09 up to the most recent quarterly 
+release. Our data application has been approved by the NHS Digital [Data Access Request 
+Service [Data Access Request Service (DARS)](https://digital.nhs.uk/services/data-access-request-service-dars).
 
 The data will be accessed in The Health Foundation's Secure Data Environment; a 
 secure data analysis facility (accredited with the ISO27001 information security
@@ -34,153 +29,161 @@ standard, and recognised for the NHS Digital Data Security and Protection
 Toolkit). No information that could directly identify a patient or other 
 individual will be used.
 
-## Documentation (work in progress)
+## Documentation
 
-The doc folder contains information on 
-* the protocol for HES data cleaning and processing used [to be added]
-* the design of the pipeline: ADR and process.md
-* the [logs](doc/logging.md) that are created 
-* definitions of [derived variables](doc/derived_variables.md) - to be updated
-* definitions of [derived tables](doc/derived_tables.md)
+The doc folder contains information on: 
+* HES data cleaning and processing protocol [to be added]
+* Pipeline design: major design choices are documented in the architecture decision record and the process file contains an overview over the pipeline
+* [Logs](doc/logging.md) that are created during the run
+* Definitions of [derived variables](doc/derived_variables.md)
+* Definitions of [derived tables](doc/derived_tables.md)
 
-Sections at the end of the README describe
-* how to use the pipeline 
-* how to query the resulting SQLite database. 
+In addition, sections below describe
+* how to run the pipeline to prepare a HES extract for analysis [link]
+* how to query the resulting SQLite database [link]
+* what to avoid when querying the database [link] 
+
+## How does it work?
+
+As the HES data prepared in this pipeline is not publicly available, the code 
+cannot be used to replicate the same clean data and database. However, the code 
+can be used on similar patient-level HES extracts to prepare the 
+datasets for analysis. For more detailed information on how the pipeline works see below or 
+refer to the [process document](doc/process.md).
 
 ### Pipeline design and features 
 
-The process file (process.md) describes the overall design of the pipeline, 
+The [process document](doc/process.md) describes the overall design of the pipeline, 
 lists the necessary inputs and a high-level description of the steps in the 
 workflow. 
 
 The flowchart shows how user input and data move through the different 
 pipeline functions. 
 
-The pipeline
-* creates a SQLite connection and database
-* reads ONS and bridge files, merges them and adds them to the database 
-* reads HES raw data files in chunks and adds it to the databasea after 
+The pipeline can by run in two modes:
+1. **BUILD mode** creates a new HES database from scratch (this is the default). 
+2. **UPDATE mode** incorporates data updates into an existing HES database (if `update = TRUE`). HES data updates within the same year are overlapping, so some of the old data will be dropped and replaced with the new update. ONS mortality data is completely refreshed with each data update.  
+
+In **BUILD mode**, the pipeline
+* creates a SQLite database
+* reads ONS mortality and HES bridge files, merges them and adds them as a new table to the database 
+* per HES dataset, reads HES raw data files in chunks and adds it to the respective table in the database after 
     + checking if all expected columns are present
     + coercing data types (optional)
     + cleaning variables 
-    + deriveing variables (based on a single row of data)
-    + combining with public data on deprivation and CCGs (optional)
-    + flags comorbidities (to be made optional)
+    + deriving new variables (for variables based on individual records or rows)
+    + combining with public data on LSOA-level Index of multiple deprivation and CCGs (optional)
+    + flagging comorbidities and calculating the Charlson, Elixhause and a custom frailty index (optional)
 * flags duplicates in the database (optional)
-* creates inpatient spells (not yet implemented)
-* creates continuous inpatient spells (not yet implemented)
-* creates summary tables for the clean dataset 
+* creates inpatient spells 
+* creates continuous inpatient spells 
+* creates summary tables for the clean dataset and saves them to the database and as csv files. 
 
-### Architecture design record (ADR)
+In **UPDATE mode**, the pipeline
+* detects which data year to update from the file name of the raw files to be processed
+* deletes the subset of records that will be replaced for each HES dataset as well as the ONS table
+* moves the existing data into temporary backup tables
+* processes the new data (as above, up to the duplicate flagging step)
+* joins the existing records with the new data update
+* creates inpatient spells on the combined data
+* creates continuous inpatient spells on the combined data
+* creates summary tables for the clean dataset and saves them to the database and as csv files. 
 
-The architecture design record (ADR) captures architectural decision and design 
-choices, along with their context, rationale and consequences. 
+### Architecture/analysis decision record
+
+The architecture decision record (ADR) captures architectural decision and design 
+choices, along with their context, rationale and consequences. In addition, we recorded some
+analytical decisions.
 
 So far, we have recorded decisions regarding
-* where and how the raw data is stored and, if necessary, updated 
-(data_location.md and data_storage_and_access.md)
-* how the data is read in in chunks and how to determine the number of required
-chunks per file (chunking_large_data_file_optimisation.md)
-* how dates will be stored in the SQLite database (storing_dates_in_database.md)
-* the chosen method to compare A&E arrivel time of two records while
-identify duplicate records (comparing_arrivaltime_across_days.md)
-* hardcoding variable names during cleaning and deriving steps (to be added)
-* the methodology used to create inpatient spells (to be added)
-* the methodology used to create continuous inpatient spells (to be added)
-
-
-### Derived variables 
-
-Derived variables are documented in [derived variables](doc/derived_variables.md)
-
-## How does it work?
-
-As the data prepared in this pipeline is not publicly available, the code 
-cannot be used to replicate the database. However, with modifications the code 
-will be able to be used on other patient-level HES extracts to prepare the 
-datasets for analysis. For more information on how the pipeline works please 
-refer to the [process document](doc/process.md).
+* [where](doc/adr/data_location.md) and [how](doc/adr/data_storage_and_access.md) the raw data is stored and, if necessary, updated
+* how the data is [read in in chunks](doc/adr/chunking_large_data_file_optimisation.md) and how to determine the number of required chunks per file 
+* how dates will be [stored in the SQLite database](doc/adr/storing_dates_in_database.md)
+* the chosen method to [compare A&E arrival time of two records](doc/adr/comparing_arrivaltime_across_days.md) while
+identify duplicate records 
+* how admission date will be [imputed if missing](doc/adr/imputing_admission_date.md)
+* [hardcodeding of some column names](doc/adr/hardcoding_variables.md)
+* the methodology used to create [inpatient spells](doc/adr/creating_inpatient_spells.md) 
+* the methodology used to create [continuous inpatient spells](doc/adr/creating_continuous_inpatient_spells.md) 
+* the definition of the [custom frailty index](doc/adr/frailty_score.md) calculated using admitted patient care data. 
 
 ## Requirements
 
+### Software and R packages
+
 The HES pipeline was built under R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night".
 
-The following R packages are required to run the HES pipeline:
-*  data.table (1.12.2)
-*  DBI (1.0.0)
-*  dplyr (0.8.3)
-*  furrr (0.1.0)
-*  logger (0.1)
-*  plyr (1.8.4)
-*  rlang (0.4.0)
-*  testthat (2.2.1)
-*  tidylog (0.2.0)
-*  tidyverse (1.2.1)
-*  comorbidity (0.5.3)
+The following R packages, which are available on CRAN, are required to run the HES pipeline:
+*  [data.table (1.12.2)](https://cran.r-project.org/web/packages/data.table/index.html)
+*  [DBI (1.0.0)](https://cran.r-project.org/web/packages/DBI/index.html)(1.0.0)
+*  [tidyverse (1.2.1)](https://www.tidyverse.org/)(1.2.1)
+*  [tidylog (0.2.0)](https://cran.r-project.org/web/packages/tidylog/index.html)(0.2.0)
+*  [readxl(1.3.3)](https://cran.r-project.org/web/packages/readxl/index.html)
+*  [furrr (0.1.0)](https://cran.r-project.org/web/packages/furrr/index.html)
+*  [logger (0.1)](https://cran.r-project.org/web/packages/logger/index.html)
+*  [plyr (1.8.4)](https://cran.r-project.org/web/packages/plyr/index.html)
+*  [rlang (0.4.0)](https://cran.r-project.org/web/packages/rlang/index.html)
+*  [comorbidity (0.5.3)](https://cran.r-project.org/web/packages/comorbidity/index.html)
 
-## Installation
+### Storage capacity
 
-Download the HES Pipeline by either downloading or 
-[cloning the repo](https://github.com/HFAnalyticsLab/HES_pipeline.git).
+The location where the database is created needs to have sufficient storage space available, roughly equivalent to the combined file size of the raw HES data extract plus 2 x file size of the APC data set (as the tables for inpatient spells and continuous inpatient spells will be added).
 
-## Usage: running the pipeline to prepare HES for analysis
+### Temporary storage
 
-The pipeline can by run in two modes:
-1. Building a HES database from scratch. This is the default. 
-2. Update mode (`update = TRUE`). This incorporates data updates into an existing HES database. 
+Some of the processing steps are not performed in memory but as SQLite queries. This includes the duplicate flagging algorithm, spell creation and the creationg of summary statistics tables on the clean data. Depending on the size of the dataset, these steps create large temporary SQLite databases (.etiqls files), which are automatically deleted once the query has been executed. By default, these are created in the R home directory, which is often located on a drive with restricted storage capacity. 
 
+We have found that execution of the pieline fails when not enough temporary storage is available (error message 'Database or disk is full'). This can be fixed by changing the location where temporary SQLite databases are created. On Windows, the temporary storage location is controlled by the environmental variable "TMP". We recommended to create a project-level .Renviron file to set TMP to a location with sufficient storage capacity. 
 
-The following is needed to run the pipeline:
-* **HES data extract** The pipeline can process any of the following patient-level
+## Running the pipeline 
+
+### Required arguments
+
+* `data_path` Path to the HES data extract.     
+The pipeline can process any of the following patient-level
 datasets: HES Admitted Patient Care, HES Accidents & Emergencies, HES Ouptatient
 care, HES Critical Care and ONS Mortality records (including the bridge file 
 linking it to HES). It requires at least one of them. The raw data files have to 
-be located in the same folder. The path will be provided as the `data_path` argument 
-to the `pipeline()` function call. 
-* **SQLite database location (storage)** This is where the SQLite database will be built. 
-This location will need to have sufficient storage space available to accomodate the
-SQLite database, roughly equivalent to the combined file size of the raw HES data extract
-plus 2 x file size of the A&E data set (as the tables for inpatient spells and
-continuous inpatient spells will be added). The path to the folder will be provided as 
-the `database_path` argument to the `pipeline()` function call. 
-* **Dataset codes** The `data_set_codes` argument tells the pipeline which data 
-sets to expect to find in the `data_path` folder. The codes only be all or a 
-subset of "APC", "AE", "CC" and "OP", which also need to be present in the names of the 
-raw files (in our experience, this is the case for raw HES files received directly 
-from NHS Digital). ONS Mortality records are processed automatically if present
-in the `data_path` folder. The file names for mortality records and bridge files 
-should contain "ONS" and "BF", respectively.
-* **Optional: chunk sizes** Each data file is read and processed in chunks, ie defnied a 
-number of rows at a time. The default chunk size is 1 million lines but can 
-also be set by the user. Larger chunk sizes (ie a lower number of chunks per file)
-decrease the overall processing time significanctly. We think that this is because 
-for each chunk in a given file, `fread()` needs progressively longer to move to 
-the right row number to start reading data. As each dataset can have a different 
-number of variables, and therefore requires different amounts of memory per row, 
-chunk sizes have to be defined for each dataset separately. It is recommended to 
-test this on a smaller subset of the data first, as very large chunk sizes can 
-lead RStudio to crash. 
-* **Expected column names** The pipeline requires a csv file listing the expected
-column names for each data set. This table is expected to have at least two
-column, `colnames` and `dataset`, similar to [csv]. Column headers are automatically 
-capitalised while the data is read in, so the column names in the csv file should
-be capitalised as well. This information will be used to check whether each raw
+be located in the same folder. 
+
+* `database_path` Path to a folder where the SQLite database will be built. 
+
+*  `data_set_codes` Expected HES datasets in the `data_path` folder.     
+This should be one or several of "APC", "AE", "CC" and "OP". These identifiers are matched to the names of the raw files, which should be the case for raw HES files received from NHS Digital. ONS Mortality records and ONS-HES bridge files are processed by default if present. The file names for mortality records and bridge files should contain "ONS" and "BF", respectively.
+
+* `expected_headers_file` Path to a csv file with expected column names for each data set.    
+This csv file has at least two columns, named `colnames` and `dataset`, similar to [the template csv]. Column headers in the data are automatically capitalised while the data is read in, so the column names in the csv file should be all caps. This information will be used to check whether each raw
 data file contains all expected columns. 
-* **Optional: expected data types** By default, the function used to read in the 
-data will automatically detect column types. The pipeline providesoption to coere 
-each variables into user-defined types by setting the `coerce` argument to `TRUE`.
-This required a third column `type` in the csv file mentioned above, see to [csv].
-Note that since SQLite does not have a date datatype. Date variables need to be 
-stored as integers. They should therefore be be listed as integers in the csv file. 
-* **Optional: merging reference data** Additional reference data that can be merged 
-in on the record level currenlty include Index of Multiple Deprivation (IMD), 2015
-and/or 2019 versions, and CCG identifiers. The files paths to the reference files 
-should be supplied as `IMD_2014_csv`, `IMD_2019_csv` and `CCG_XLSX` arguments and
-will be joined on patient LSOA11. The data files can be downloaded from [to be added].
-* **Optional: flagging duplicate records** This can be switched on by setting
-`duplicate = TRUE`. Warning: this will significantly increase the run time of the pipeline.
+
+### Optional arguments 
+
+The following arguments have a default setting:
+
+* `chunk_sizes` Number of rows per chunk for each data set.    
+Each data file is read and processed in chunks of defied a number of rows. The default size is 1 million lines per chunk but this can be modified by the user. Larger chunk sizes, resulting in a smaller number of chunks per file, decrease the overall processing time. This is probably because for each chunk in a given file, `fread()` needs progressively longer to move to the specified row number to start reading the data. However, large chunk sizes also increase the time in takes to process each chunk in memory. The optimal chunk size balances processing time with reading time and is dependent on the system and the dataset, as each dataset can have a different number of variables, and therefore requires different amounts of memory per row. It is recommended to run tests on a smaller subset of data first, as very large chunk sizes can 
+cause RStudio to crash. 
+
+* `coerce` Coercing data types.    
+By default, the `fread()` function used to read in the data will automatically detect column types.    
+Alternatively, data types can be coerced to user-defined types by setting this argument to `TRUE`.
+Column types are supplied int the third column, called `type`,  in the csv file with the expected 
+column names, see the template [csv]. Note that SQLite does not have a date datatype. Date variables need to be stored as characters and should therefore be be listed as characters in the csv file. 
+
+* `IMD_2014_csv`, `IMD_2019_csv` and `CCG_xlsx` Paths to files containing reference data to be merged.   
+Additional reference data that can be merged to each record currentlyy include the Index of Multiple Deprivation (IMD), 2015 and/or 2019 versions, and CCG identifiers. The files paths to the reference files 
+should be supplied as  arguments and will be joined on patient LSOA11. The csv files containing LSOA11-to-IMD mappings need to have a column name that starts with "LSOA code", a column name that contains "Index of Multiple Deprivation (IMD) Rank" and a column name that contains "Index of Multiple Deprivation (IMD) Decile". The lookup files for [IMD 2015](https://www.gov.uk/government/statistics/english-indices-of-deprivation-2015) and [IMD 2019](https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019) can be downloaded from GOV.UK (File 7:  all ranks, deciles and scores for the indices of deprivation, and population denominators). The lookup file for [CCG identifiers](https://www.england.nhs.uk/publication/technical-guide-to-ccg-allocations-2018-19-apr-2018-spreadsheet-files-for-ccg-allocations-2018-19/) can be downloaded from NHS Digital (File: X - Changes to CCG-DCO-STP mappings over time). 
+
+* `update` Switch pipeline mode.     
+Pipeline mode is switched from BUILD to UPDATE mode by setting this argument to `TRUE`.
+
+* `duplicate` Flagging duplicate records.   
+Additional columns will be created in the APC, A&E and OP dataset that indicitates whether or not a record is likely to be a duplicate if this argumet is set to `TRUE`. The definition and derivation rules can be found in (derived_variables.md). Warning: this will significantly increase the run time of the pipeline.
+
+* `comorbiditees` Flagging comorbidities.    
+Additional columns will be created in the APC dataset, including flags for individual conditions and weighted and unweighted Charlson and Elixhauser scores if this argument is set to `TRUE` (also see the documentaion of the R package comorbidity). In addition, the pipeline flags conditions related to frailty and calculates a custom frailty index (see ?).Warning: this will significantly increase the run time of the pipeline.
 
 
+### Usage
 
 Currently the pipeline is designed to run in an RStudio session. From the R
 console compile the code:
@@ -205,10 +208,19 @@ Example run:
             IMD_15_csv = "IMD_2015_LSOA.csv", 
             IMD_19_csv = "IMD_2019_LSOA.csv", 
             CCG_xlsx = "xchanges-to-ccg-dco-stp-mappings-over-time.xlsx", 
-            coerce = TRUE, update = FALSE, duplicate = FALSE)`
+            coerce = TRUE, update = FALSE, duplicates = FALSE, comorbidities = FALSE)`
 
-## Querying the clean HES data
+## Querying the HES database
 
+For guides on how to query SQLite databases from R, for example see the RStudio tutorial (Databases using R)[].
+
+The database can be queried:
+1. By writing SQLite syntax and executing these queries in R using the DBI package
+2. By writing R dpyr syntax and using the SQL backend provided by dbplyr to translate this code into SQLite. 
+3. more to be added. 
+
+
+### Example queries using DBI and dbplyr
 
 ```R
 library(tidyverse)
@@ -238,7 +250,9 @@ dbGetQuery(con,'SELECT * FROM AE LIMIT 5')
 dbDisconnect(con)
 ```
 
-What NOT to do (to be added).
+## What NOT to do 
+
+If you are using DBI, use the `dbGetQuery()` function. Avoid using functions that could modify the underlying database, such as `dbExecute()`, `dbSendQuery()` or `dbSendStatement()`. 
 
 ## License
 
