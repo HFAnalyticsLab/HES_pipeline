@@ -6,7 +6,7 @@
 # Side effect of updating the database.
 # Doesn't return anything.
 update_var <- function(db, table, var, value, condition_query) {
-  dbSendQuery(db, paste0("UPDATE ", table, " SET ", var, " = ", value, " ", condition_query))
+  dbExecute(db, paste0("UPDATE ", table, " SET ", var, " = ", value, " ", condition_query))
 }
 
 
@@ -31,7 +31,7 @@ flag_duplicates <- function(db, table, group_by_vars, order_by_vars) {
   } else {
     c("", "")
   }
-  dbSendQuery(db, paste0("CREATE TABLE ", new_table, " AS 
+  dbExecute(db, paste0("CREATE TABLE ", new_table, " AS 
                          SELECT *, ROW_NUMBER() 
                          OVER
                          (PARTITION BY ", group_by_vars, 
@@ -43,11 +43,11 @@ flag_duplicates <- function(db, table, group_by_vars, order_by_vars) {
                          " FROM ", table,
                          " GROUP BY ", group_by_vars, ")
                          USING (", group_by_vars, ")"))
-  update <- update_var(db, table = new_table, var = "DUPLICATE", value = TRUE,
+  updated <- update_var(db, table = new_table, var = "DUPLICATE", value = TRUE,
                        condition_query = paste0("WHERE DUPLICATE_COUNT > 1 AND DUPLICATE_QUALITYRANK > 1 ", 
                                                 time_diff[2]))
-  log_info("Found {dbGetRowsAffected(update)} duplicates in A&E dataset")
-  dbSendQuery(db, paste0("DROP TABLE ", table))
-  dbSendQuery(db, paste0("ALTER TABLE ", new_table, " RENAME TO ", table))
+  log_info("Found ", updated, " duplicates in A&E dataset")
+  dbExecute(db, paste0("DROP TABLE ", table))
+  dbExecute(db, paste0("ALTER TABLE ", new_table, " RENAME TO ", table))
 }
 
