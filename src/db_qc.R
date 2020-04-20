@@ -1,5 +1,4 @@
 
-
 # Creates a datatable of summary stats for each dataset 
 # processed by the pipeline.
 # Requires an SQLite database connection, a vector of
@@ -16,7 +15,7 @@ create_dataset_summary_stats <- function(db, data_set_codes, time) {
       row <- dbGetQuery(db, paste0("SELECT COUNT() AS NO_RECORDS FROM ", t))
       row$NO_DUPLICATES <- NA
       row$PCT_DUPLICATES <- NA    
-      }
+    }
     datasets <- rbind(datasets,row)
   }
   
@@ -64,8 +63,8 @@ variable_is_null_query <- function(db, table, var) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_pct_null_query <- function(db, table, var) {
-  dbGetQuery(db, paste0("SELECT 100*COUNT() / (SELECT COUNT() FROM ", 
-  table, " WHERE ", var, " IS NULL) AS PCT_MISSING FROM ", table))
+  dbGetQuery(db, paste0("SELECT 100*(SELECT COUNT() FROM ", 
+                        table, " WHERE ", var, " IS NULL) / COUNT() AS PCT_MISSING FROM ", table))
 }
 
 # SQL query to get the maximum value in a variable.
@@ -73,7 +72,9 @@ variable_pct_null_query <- function(db, table, var) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_max_val_query <- function(db, table, var) {
-  dbGetQuery(db, paste0("SELECT MAX(", var, ") AS MAX FROM ", table))
+  dbGetQuery(db, paste0("SELECT MAX(", var, ") AS MAX FROM ", table,
+                        " WHERE ", var, " IS NOT NULL"))
+
 }
 
 
@@ -82,7 +83,8 @@ variable_max_val_query <- function(db, table, var) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_min_val_query <- function(db, table, var) {
-  dbGetQuery(db, paste0("SELECT MIN(", var, ") AS MIN FROM ", table))
+  dbGetQuery(db, paste0("SELECT MIN(", var, ") AS MIN FROM ", table,
+                        " WHERE ", var, " IS NOT NULL"))
 }
 
 
@@ -91,7 +93,8 @@ variable_min_val_query <- function(db, table, var) {
 # and a variable name.
 # Returns a datatable of the SQL query result.
 variable_mean_val_query <- function(db, table, var) {
-  dbGetQuery(db, paste0("SELECT AVG(", var, ") AS MEAN FROM ", table))
+  dbGetQuery(db, paste0("SELECT AVG(", var, ") AS MEAN FROM ", table,
+                        " WHERE ", var, " IS NOT NULL"))
 }
 
 
