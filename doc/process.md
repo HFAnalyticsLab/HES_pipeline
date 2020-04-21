@@ -5,7 +5,7 @@ data is stored,
 located, 
 * a vector of dataset codes, 
 * the path to a CSV of expected columns     
-as well as 8 optional parameters (see [Usage](README.md#usage) for more information).
+as well as 8 optional parameters (see [Running the pipeline](https://github.com/HFAnalyticsLab/HES_pipeline#running-the-pipeline) for more information).
 
 
 ### BUILD mode
@@ -54,7 +54,7 @@ with no exit workflow is also an output. The workflow is indicated by the
 direction of the blue arrows, while the looping section is demarked by the 
 hashed red line. 
 
-![flowchart](doc/flowchart.png)
+![flowchart](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/doc/flowchart.png)
 
 ### UPDATE mode
 
@@ -100,4 +100,4 @@ respective datasets.
 10. Close SQLite connection.
 
 
-![flowchart](doc/update_db_flowchart.png)
+![flowchart](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/doc/update_db_flowchart.PNG)

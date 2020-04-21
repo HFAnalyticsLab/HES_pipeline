@@ -14,8 +14,7 @@ at NHS hospitals in England.
 
 Before it can be used for analysis, HES data requires cleaning, quality control and processing to derive additional variables. The complex record structure of HES, the large number of variables and the size of the data sets makes this a challenging task both from an analytical and computational point of view.
 
-The semi-automated cleaning and processing workflow we are developing in this repository is designed to ensure that the HES data is processed consistently and reproducibly, that the cleaning process is 
-documented and that each approved analysis projects is based on the same clean data.
+The semi-automated workflow we are developing in this repository processes HES data consistently and reproducibly, that all processing steps are documented, designed to ensure that each approved analysis projects is based on the same clean data.
 
 ## Data Source
 
@@ -33,15 +32,15 @@ individual will be used.
 
 The doc folder contains information on: 
 * HES data cleaning and processing protocol [to be added]
-* Pipeline design: major design choices are documented in the architecture decision record and the process file contains an overview over the pipeline
 * [Logs](doc/logging.md) that are created during the run
 * Definitions of [derived variables](doc/derived_variables.md)
 * Definitions of [derived tables](doc/derived_tables.md)
 
 In addition, sections below describe
-* how to run the pipeline to prepare a HES extract for analysis [link]
-* how to query the resulting SQLite database [link]
-* what to avoid when querying the database [link] 
+* [pipeline design choices](https://github.com/HFAnalyticsLab/HES_pipeline#pipeline-design-and-features)
+* how to [run the pipeline to prepare a HES extract for analysis](https://github.com/HFAnalyticsLab/HES_pipeline#pipeline-design-and-features)
+* how to [query the resulting SQLite database](https://github.com/HFAnalyticsLab/HES_pipeline#querying-the-hes-database)
+* [what to avoid when querying the database](https://github.com/HFAnalyticsLab/HES_pipeline#what-not-to-do)
 
 ## How does it work?
 
@@ -114,16 +113,16 @@ identify duplicate records
 The HES pipeline was built under R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night".
 
 The following R packages, which are available on CRAN, are required to run the HES pipeline:
-*  [data.table (1.12.2)](https://cran.r-project.org/web/packages/data.table/index.html)
-*  [DBI (1.0.0)](https://cran.r-project.org/web/packages/DBI/index.html)(1.0.0)
-*  [tidyverse (1.2.1)](https://www.tidyverse.org/)(1.2.1)
-*  [tidylog (0.2.0)](https://cran.r-project.org/web/packages/tidylog/index.html)(0.2.0)
-*  [readxl(1.3.3)](https://cran.r-project.org/web/packages/readxl/index.html)
-*  [furrr (0.1.0)](https://cran.r-project.org/web/packages/furrr/index.html)
-*  [logger (0.1)](https://cran.r-project.org/web/packages/logger/index.html)
-*  [plyr (1.8.4)](https://cran.r-project.org/web/packages/plyr/index.html)
-*  [rlang (0.4.0)](https://cran.r-project.org/web/packages/rlang/index.html)
-*  [comorbidity (0.5.3)](https://cran.r-project.org/web/packages/comorbidity/index.html)
+*  [data.table](https://cran.r-project.org/web/packages/data.table/index.html) (1.12.2)
+*  [DBI](https://cran.r-project.org/web/packages/DBI/index.html)(1.0.0)
+*  [tidyverse](https://www.tidyverse.org/)(1.2.1)
+*  [tidylog](https://cran.r-project.org/web/packages/tidylog/index.html)(0.2.0)
+*  [readxl](https://cran.r-project.org/web/packages/readxl/index.html)(1.3.3)
+*  [furrr](https://cran.r-project.org/web/packages/furrr/index.html) (0.1.0)
+*  [logger](https://cran.r-project.org/web/packages/logger/index.html) (0.1)
+*  [plyr](https://cran.r-project.org/web/packages/plyr/index.html) (1.8.4)
+*  [rlang](https://cran.r-project.org/web/packages/rlang/index.html) (0.4.0)
+*  [comorbidity](https://cran.r-project.org/web/packages/comorbidity/index.html) (0.5.3)
 
 ### Storage capacity
 
@@ -152,7 +151,7 @@ be located in the same folder.
 This should be one or several of "APC", "AE", "CC" and "OP". These identifiers are matched to the names of the raw files, which should be the case for raw HES files received from NHS Digital. ONS Mortality records and ONS-HES bridge files are processed by default if present. The file names for mortality records and bridge files should contain "ONS" and "BF", respectively.
 
 * `expected_headers_file` Path to a csv file with expected column names for each data set.    
-This csv file has at least two columns, named `colnames` and `dataset`, similar to [the template csv]. Column headers in the data are automatically capitalised while the data is read in, so the column names in the csv file should be all caps. This information will be used to check whether each raw
+This csv file has at least two columns, named `colnames` and `dataset`, similar to [this template](doc/HES_expected_columns.csv). Column headers in the data are automatically capitalised while the data is read in, so the column names in the csv file should be all caps. This information will be used to check whether each raw
 data file contains all expected columns. 
 
 ### Optional arguments 
@@ -167,7 +166,7 @@ cause RStudio to crash.
 By default, the `fread()` function used to read in the data will automatically detect column types.    
 Alternatively, data types can be coerced to user-defined types by setting this argument to `TRUE`.
 Column types are supplied int the third column, called `type`,  in the csv file with the expected 
-column names, see the template [csv]. Note that SQLite does not have a date datatype. Date variables need to be stored as characters and should therefore be be listed as characters in the csv file. 
+column names, see [this template](doc/HES_expected_columns.csv). Note that SQLite does not have a date datatype. Date variables need to be stored as characters and should therefore be be listed as characters in the csv file. 
 
 * `IMD_2014_csv`, `IMD_2019_csv` and `CCG_xlsx` Paths to files containing reference data to be merged.   
 Additional reference data that can be merged to each record currentlyy include the Index of Multiple Deprivation (IMD), 2015 and/or 2019 versions, and CCG identifiers. The files paths to the reference files 
@@ -212,13 +211,12 @@ Example run:
 
 ## Querying the HES database
 
-For guides on how to query SQLite databases from R, for example see the RStudio tutorial (Databases using R)[].
+For guides on how to query SQLite databases from R, for example see the RStudio tutorial [Databases using R](https://db.rstudio.com/).
 
 The database can be queried:
 1. By writing SQLite syntax and executing these queries in R using the DBI package
 2. By writing R dpyr syntax and using the SQL backend provided by dbplyr to translate this code into SQLite. 
 3. more to be added. 
-
 
 ### Example queries using DBI and dbplyr
 
@@ -250,7 +248,7 @@ dbGetQuery(con,'SELECT * FROM AE LIMIT 5')
 dbDisconnect(con)
 ```
 
-## What NOT to do 
+## What to avoid when querying the database
 
 If you are using DBI, use the `dbGetQuery()` function. Avoid using functions that could modify the underlying database, such as `dbExecute()`, `dbSendQuery()` or `dbSendStatement()`. 
 
