@@ -252,6 +252,10 @@ dbDisconnect(con)
 
 If you are using DBI, use the `dbGetQuery()` function. Avoid using functions that could modify the underlying database, such as `dbExecute()`, `dbSendQuery()` or `dbSendStatement()`. 
 
+## Authors
+* **Fiona Grimm** - [@fiona_grimm](https://twitter.com/fiona_grimm) - [fiona-grimm](https://github.com/fiona-grimm)
+* **Sebastian Bailey** - [@sseb231](https://twitter.com/sseb231) - [seb231](https://github.com/seb231)
+
 ## License
 
 This project is licensed under the [MIT License](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/LICENSE).
