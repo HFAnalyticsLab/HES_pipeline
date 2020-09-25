@@ -1,58 +1,65 @@
 
 # Sets NEW_SPELL to TRUE where an episode does not belong to the same spell
-# as the previous episode.
+# as the previous episode. Creates unique spell IDs per patient
 # Takes an open SQLite database connection.
 # Returns nothing, updates the APC table in the database.
-derive_new_spell <- function(db, spell_grouping){
+derive_spells <- function(db, spell_grouping){
   
   cols_to_keep <- dbListFields(db, "APC")
   cols_to_keep <- cols_to_keep[!cols_to_keep %in% c("NEW_SPELL", "ROWCOUNT", "SPELL_ID")]
 
   dbExecute(db, paste0("CREATE TABLE APC2 AS 
+                        WITH APC_CTE AS
+                          (
+                          SELECT ", str_c(cols_to_keep, collapse = ", "), ",
+                          LAG(ADMIDATE_FILLED, 1) OVER ", spell_grouping, " AS PREV_ADMIDATE_FILLED,
+                          LAG(EPISTART, 1) OVER ", spell_grouping, " AS PREV_EPISTART,
+                          LAG(DISMETH, 1) OVER ", spell_grouping, " AS PREV_DISMETH,
+                          LAG(EPIEND, 1) OVER ", spell_grouping, " AS PREV_EPIEND
+                          FROM APC
+                          ),
+                       APC_DATA AS
+                          (
                           SELECT ", str_c(cols_to_keep, collapse = ", "), ", CASE
-                          WHEN EPI_VALID IS 0 THEN NULL
-                          WHEN ADMIDATE_FILLED = LAG(ADMIDATE_FILLED, 1) OVER ", spell_grouping, " THEN 0
-                          WHEN EPISTART = LAG(EPISTART, 1) OVER ", spell_grouping, " THEN 0
-                          WHEN LAG(DISMETH, 1) OVER ", spell_grouping, " IN (8,9) AND
-                          EPISTART = LAG(EPIEND, 1) OVER ", spell_grouping, " THEN 0
-                          ELSE 1
-                          END NEW_SPELL 
-                         FROM APC"))
+                            WHEN EPI_VALID IS 0 THEN NULL
+                            WHEN ADMIDATE_FILLED = PREV_ADMIDATE_FILLED THEN 0
+                            WHEN EPISTART = PREV_EPISTART THEN 0
+                            WHEN PREV_DISMETH IN (8,9) AND EPISTART = PREV_EPIEND THEN 0
+                            ELSE 1
+                            END NEW_SPELL 
+                          FROM APC_CTE
+                          ),
+                       APC_ROWCOUNT AS
+                          (SELECT ENCRYPTED_HESID, NEW_SPELL, EPISTART, EPIEND, ADMIDATE_FILLED, EPIKEY,
+                           ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY EPISTART, 
+                                              EPIEND, EPIORDER, TRANSIT, EPIKEY) AS ROWCOUNT
+                          FROM APC_DATA
+                          WHERE NEW_SPELL = 1
+                          ),
+                       APC_AUGMENTED AS
+                          (
+                          SELECT AD1.*, AR2.ROWCOUNT
+                          FROM APC_DATA AS AD1
+                          LEFT JOIN APC_ROWCOUNT AS AR2
+                          on AD1.ENCRYPTED_HESID = AR2.ENCRYPTED_HESID
+                          AND AD1.NEW_SPELL = AR2.NEW_SPELL
+                          AND AD1.EPISTART = AR2.EPISTART
+                          AND AD1.EPIEND = AR2.EPIEND
+                          AND AD1.ADMIDATE_FILLED = AR2.ADMIDATE_FILLED
+                          AND AD1.EPIKEY = AR2.EPIKEY
+                          )
+                          
+                        SELECT APC_AUGMENTED.*, CASE
+                          WHEN NEW_SPELL = 0 THEN LAG(ROWCOUNT, 1) OVER ", spell_grouping, "
+                          WHEN NEW_SPELL = 1 THEN ROWCOUNT
+                          END SPELL_ID
+                        FROM APC_AUGMENTED
+                       "))
   
   dbRemoveTable(db, "APC")
   dbExecute(db, "ALTER TABLE APC2 RENAME TO APC")
   
 }
-
-# Create unique spell IDs per patient
-# Takes an open SQLite database connection.
-# Returns nothing, updates the APC table in the database.
-derive_spell_id <- function(db, spell_grouping){
-    
-  dbExecute(db, paste0("CREATE TABLE APC2 AS
-                         SELECT * FROM APC
-                         LEFT JOIN
-                         (SELECT ENCRYPTED_HESID, NEW_SPELL, EPISTART, EPIEND, ADMIDATE_FILLED, EPIKEY,
-                         ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY EPISTART, 
-                                                     EPIEND, EPIORDER, TRANSIT, EPIKEY) AS ROWCOUNT
-                         FROM APC WHERE NEW_SPELL = 1)
-                         USING (ENCRYPTED_HESID, NEW_SPELL, EPISTART, EPIEND, ADMIDATE_FILLED, EPIKEY)"))
-  
-  dbRemoveTable(db, "APC")
-  
-  dbExecute(db, paste0("CREATE TABLE APC3 AS
-                         SELECT *, CASE
-                         WHEN NEW_SPELL IS NULL THEN NULL
-                         WHEN NEW_SPELL = 0 THEN LAG(ROWCOUNT, 1) 
-                           OVER ", spell_grouping, " 
-                         WHEN NEW_SPELL = 1 THEN ROWCOUNT
-                         END SPELL_ID 
-                         FROM APC2"))
-  
-  dbRemoveTable(db, "APC2")
-  dbExecute(db, "ALTER TABLE APC3 RENAME TO APC")
-}
-
 
 # Recover APC headers pertinent to the start of an episode
 # Takes n open SQLite database connection.
@@ -128,57 +135,62 @@ derive_disdate_missing <- function(db){
 
 
 # Sets NEW_CIPS to TRUE where a spell does not belong to the same continuous inpatient 
-# spell (CIPS) as the previous spell
+# spell (CIPS) as the previous spell. Create unique CIPS IDs per patient.
 # Takes an open SQLite database connection.
 # Returns nothing, updates the APCS table in the database.
-derive_new_cips <- function(db, cips_grouping){
+derive_cips <- function(db, cips_grouping){
   
   cols_to_keep <- dbListFields(db, "APCS")
   cols_to_keep <- cols_to_keep[!cols_to_keep %in% c("NEW_CIPS", "ROWCOUNT", "CIPS_ID")]
   
-  
   dbExecute(db, paste0("CREATE TABLE APCS2 AS 
+                        WITH APCS_CTE AS
+                          (
+                          SELECT ", str_c(cols_to_keep, collapse = ", "), ",
+                          LAG(julianday(EPIEND), 1) OVER ", cips_grouping, " AS PREV_EPIEND_JUL,
+                          LAG(DISDEST, 1) OVER ", cips_grouping, " AS PREV_DISDEST
+                          FROM APCS
+                          ),
+                       APCS_DATA AS
+                          (
                           SELECT ", str_c(cols_to_keep, collapse = ", "), ", CASE
-                          WHEN julianday(EPISTART) - LAG(julianday(EPIEND), 1) OVER ", cips_grouping, " <= 3 
-                               AND (LAG(DISDEST, 1) OVER ", cips_grouping, " IN (51, 52, 53) 
+                            WHEN julianday(EPISTART) - PREV_EPIEND_JUL <= 3
+                              AND (PREV_DISDEST IN (51, 52, 53) 
                                     OR ADMISORC IN (51, 52, 53)
                                     OR ADMIMETH IN (67, 81)) THEN 0
-                          ELSE 1
-                          END NEW_CIPS 
-                         FROM APCS"))
+                            ELSE 1
+                            END NEW_CIPS 
+                          FROM APCS_CTE
+                          ),
+                       APCS_ROWCOUNT AS
+                          (SELECT ENCRYPTED_HESID, NEW_CIPS, ADMIDATE_FILLED, 
+                           ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY ADMIDATE_FILLED) 
+                           AS ROWCOUNT
+                           FROM APCS_DATA
+                           WHERE NEW_CIPS = 1
+                          ),
+                       APCS_AUGMENTED AS
+                          (
+                          SELECT AD1.*, AR2.ROWCOUNT
+                          FROM APCS_DATA AS AD1
+                          LEFT JOIN APCS_ROWCOUNT AS AR2
+                          on AD1.ENCRYPTED_HESID = AR2.ENCRYPTED_HESID
+                          AND AD1.NEW_CIPS = AR2.NEW_CIPS
+                          AND AD1.ADMIDATE_FILLED = AR2.ADMIDATE_FILLED
+                          )
+                          
+                        SELECT APCS_AUGMENTED.*, CASE
+                          WHEN NEW_CIPS = 0 THEN LAG(ROWCOUNT, 1) OVER ", cips_grouping, "
+                          WHEN NEW_CIPS = 1 THEN ROWCOUNT
+                          END CIPS_ID
+                        FROM APCS_AUGMENTED
+                       "))
   
   dbRemoveTable(db, "APCS")
   dbExecute(db, "ALTER TABLE APCS2 RENAME TO APCS")
   
 }
 
-# Create unique CIPS IDs per patient
-# Takes an open SQLite database connection.
-# Returns nothing, updates the APCS table in the database.
-derive_cips_id <- function(db, cips_grouping){
-  
-  dbExecute(db, paste0("CREATE TABLE APCS2 AS
-                         SELECT * FROM APCS
-                         LEFT JOIN
-                         (SELECT ENCRYPTED_HESID, NEW_CIPS, ADMIDATE_FILLED, 
-                         ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY ADMIDATE_FILLED) 
-                         AS ROWCOUNT
-                         FROM APCS WHERE NEW_CIPS = 1)
-                         USING (ENCRYPTED_HESID, NEW_CIPS, ADMIDATE_FILLED)"))
-  
-  dbRemoveTable(db, "APCS")
-  
-  dbExecute(db, paste0("CREATE TABLE APCS3 AS
-                         SELECT *, CASE
-                         WHEN NEW_CIPS = 0 THEN LAG(ROWCOUNT, 1) 
-                           OVER ", cips_grouping, " 
-                         WHEN NEW_CIPS = 1 THEN ROWCOUNT
-                         END CIPS_ID 
-                         FROM APCS2"))
-  
-  dbRemoveTable(db, "APCS2")
-  dbExecute(db, "ALTER TABLE APCS3 RENAME TO APCS")
-}
 
 # Recover APCS headers pertinent to the start of a spell
 # Takes n open SQLite database connection.

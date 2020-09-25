@@ -123,17 +123,15 @@ create_spells_cips <- function(db){
     cips_grouping_query <- "(PARTITION BY ENCRYPTED_HESID ORDER BY ADMIDATE_FILLED)"
     
     log_info("Deriving spells and spell IDs...")
-    derive_new_spell(db, spell_grouping = spell_grouping_query)
-    derive_spell_id(db, spell_grouping = spell_grouping_query)
-    
+    derive_spells(db, spell_grouping = spell_grouping_query)
+
     log_info("Deriving spells and spell IDs complete. Creating spell table...")
     create_inpatient_spells_table(db)
     derive_disdate_missing(db)
     
     log_info("Creating spell table complete. Deriving CIPS and CIPS IDs...")
-    derive_new_cips(db, cips_grouping = cips_grouping_query)
-    derive_cips_id(db, cips_grouping = cips_grouping_query)
-    
+    derive_cips(db, cips_grouping = cips_grouping_query)
+
     log_info("Deriving CIPS and CIPS IDs complete. Creating CIPS table...")
     create_cips_table(db)
     log_info("Creating CIPS table complete.")
