@@ -9,52 +9,45 @@ derive_spells <- function(db, spell_grouping){
   cols_to_keep <- cols_to_keep[!cols_to_keep %in% c("NEW_SPELL", "ROWCOUNT", "SPELL_ID")]
 
   dbExecute(db, paste0("CREATE TABLE APC2 AS 
-                        WITH APC_CTE AS
-                          (
-                          SELECT ", str_c(cols_to_keep, collapse = ", "), ",
-                          LAG(ADMIDATE_FILLED, 1) OVER ", spell_grouping, " AS PREV_ADMIDATE_FILLED,
-                          LAG(EPISTART, 1) OVER ", spell_grouping, " AS PREV_EPISTART,
-                          LAG(DISMETH, 1) OVER ", spell_grouping, " AS PREV_DISMETH,
-                          LAG(EPIEND, 1) OVER ", spell_grouping, " AS PREV_EPIEND
-                          FROM APC
-                          ),
-                       APC_DATA AS
-                          (
-                          SELECT ", str_c(cols_to_keep, collapse = ", "), ", CASE
-                            WHEN EPI_VALID IS 0 THEN NULL
-                            WHEN ADMIDATE_FILLED = PREV_ADMIDATE_FILLED THEN 0
-                            WHEN EPISTART = PREV_EPISTART THEN 0
-                            WHEN PREV_DISMETH IN (8,9) AND EPISTART = PREV_EPIEND THEN 0
-                            ELSE 1
-                            END NEW_SPELL 
-                          FROM APC_CTE
-                          ),
-                       APC_ROWCOUNT AS
-                          (SELECT ENCRYPTED_HESID, NEW_SPELL, EPISTART, EPIEND, ADMIDATE_FILLED, EPIKEY,
-                           ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY EPISTART, 
-                                              EPIEND, EPIORDER, TRANSIT, EPIKEY) AS ROWCOUNT
-                          FROM APC_DATA
-                          WHERE NEW_SPELL = 1
-                          ),
-                       APC_AUGMENTED AS
-                          (
-                          SELECT AD1.*, AR2.ROWCOUNT
-                          FROM APC_DATA AS AD1
-                          LEFT JOIN APC_ROWCOUNT AS AR2
-                          on AD1.ENCRYPTED_HESID = AR2.ENCRYPTED_HESID
-                          AND AD1.NEW_SPELL = AR2.NEW_SPELL
-                          AND AD1.EPISTART = AR2.EPISTART
-                          AND AD1.EPIEND = AR2.EPIEND
-                          AND AD1.ADMIDATE_FILLED = AR2.ADMIDATE_FILLED
-                          AND AD1.EPIKEY = AR2.EPIKEY
-                          )
-                          
-                        SELECT APC_AUGMENTED.*, CASE
-                          WHEN NEW_SPELL = 0 THEN LAG(ROWCOUNT, 1) OVER ", spell_grouping, "
-                          WHEN NEW_SPELL = 1 THEN ROWCOUNT
-                          END SPELL_ID
-                        FROM APC_AUGMENTED
-                       "))
+                       WITH APC_DERIVED AS
+                       (
+                         SELECT ", str_c(cols_to_keep, collapse = ", "), ",
+                         LAG(ADMIDATE_FILLED, 1) OVER ", spell_grouping, " AS PREV_ADMIDATE_FILLED,
+                         LAG(EPISTART, 1) OVER ", spell_grouping, " AS PREV_EPISTART,
+                         LAG(DISMETH, 1) OVER ", spell_grouping, " AS PREV_DISMETH,
+                         LAG(EPIEND, 1) OVER ", spell_grouping, " AS PREV_EPIEND,
+                         ROW_NUMBER() OVER ", spell_grouping, " AS ROWNUMBER
+                         FROM APC
+                       ),
+                       APC_NEWSPELL AS
+                       (
+                         SELECT ", str_c(cols_to_keep, collapse = ", "), ", ROWNUMBER, CASE
+                         WHEN EPI_VALID IS 0 THEN NULL
+                         WHEN ADMIDATE_FILLED = PREV_ADMIDATE_FILLED THEN 0
+                         WHEN EPISTART = PREV_EPISTART THEN 0
+                         WHEN PREV_DISMETH IN (8,9) AND EPISTART = PREV_EPIEND THEN 0
+                         ELSE 1
+                         END NEW_SPELL 
+                         FROM APC_DERIVED
+                       ),
+                       APC_SPELLID1 AS
+                       (
+                         SELECT *, CASE
+                         WHEN NEW_SPELL = 1 THEN ROWNUMBER
+                         WHEN NEW_SPELL = 0 THEN 0
+                         WHEN NEW_SPELL IS NULL THEN NULL
+                         END SPELL_ID_TEMP
+                         FROM APC_NEWSPELL
+                       )
+                       
+                       SELECT ", str_c(cols_to_keep, collapse = ", "), ", NEW_SPELL, CASE
+                       WHEN NEW_SPELL = 1 THEN SPELL_ID_TEMP
+                       WHEN NEW_SPELL IS NULL THEN NULL
+                       WHEN NEW_SPELL = 0 THEN MAX(SPELL_ID_TEMP) OVER (PARTITION BY ENCRYPTED_HESID, 
+                                                                        PROCODE3 ORDER BY ROWNUMBER ASC ROWS BETWEEN
+                                                                        UNBOUNDED PRECEDING AND CURRENT ROW)
+                       END SPELL_ID
+                       FROM APC_SPELLID1"))
   
   dbRemoveTable(db, "APC")
   dbExecute(db, "ALTER TABLE APC2 RENAME TO APC")
@@ -91,7 +84,7 @@ first_episode_query <- function(db) {
 
 
 # SQL query to recover variables concerning the last episode in a spell
-last_episode_query <- "SELECT ENCRYPTED_HESID, DISDATE, DISDEST, DISMETH, DISREADYDATE, SPELL_ID,
+last_episode_query <- "SELECT ENCRYPTED_HESID, DISDATE, DISDEST, DISMETH, DISREADYDATE, SPELL_ID, PROCODE3,
                         EPIKEY AS EPIKEY_DIS, MAX_EPIEND AS EPIEND FROM
                        (SELECT *, MAX(EPIEND) AS MAX_EPIEND FROM APC GROUP BY ENCRYPTED_HESID, SPELL_ID)"
 
@@ -112,7 +105,7 @@ create_inpatient_spells_table <- function(db) {
            (", first_episode_query(db), ")
            LEFT JOIN
            (", last_episode_query, ")
-           USING (ENCRYPTED_HESID, SPELL_ID)"))
+           USING (ENCRYPTED_HESID, PROCODE3, SPELL_ID)"))
 }
 
 # Creates an empty column DISDATE_MISSING in the APCS table and 
@@ -144,46 +137,41 @@ derive_cips <- function(db, cips_grouping){
   cols_to_keep <- cols_to_keep[!cols_to_keep %in% c("NEW_CIPS", "ROWCOUNT", "CIPS_ID")]
   
   dbExecute(db, paste0("CREATE TABLE APCS2 AS 
-                        WITH APCS_CTE AS
+                        WITH APCS_DERIVED AS
                           (
                           SELECT ", str_c(cols_to_keep, collapse = ", "), ",
                           LAG(julianday(EPIEND), 1) OVER ", cips_grouping, " AS PREV_EPIEND_JUL,
-                          LAG(DISDEST, 1) OVER ", cips_grouping, " AS PREV_DISDEST
+                          LAG(DISDEST, 1) OVER ", cips_grouping, " AS PREV_DISDEST,
+                          ROW_NUMBER() OVER ", cips_grouping, " AS ROWNUMBER
                           FROM APCS
                           ),
-                       APCS_DATA AS
+                       APCS_NEWCIPS AS
                           (
-                          SELECT ", str_c(cols_to_keep, collapse = ", "), ", CASE
+                          SELECT ", str_c(cols_to_keep, collapse = ", "), ", ROWNUMBER, CASE
                             WHEN julianday(EPISTART) - PREV_EPIEND_JUL <= 3
                               AND (PREV_DISDEST IN (51, 52, 53) 
                                     OR ADMISORC IN (51, 52, 53)
                                     OR ADMIMETH IN (67, 81)) THEN 0
                             ELSE 1
                             END NEW_CIPS 
-                          FROM APCS_CTE
+                          FROM APCS_DERIVED
                           ),
-                       APCS_ROWCOUNT AS
-                          (SELECT ENCRYPTED_HESID, NEW_CIPS, ADMIDATE_FILLED, 
-                           ROW_NUMBER() OVER (PARTITION BY ENCRYPTED_HESID ORDER BY ADMIDATE_FILLED) 
-                           AS ROWCOUNT
-                           FROM APCS_DATA
-                           WHERE NEW_CIPS = 1
-                          ),
-                       APCS_AUGMENTED AS
+                       APCS_CIPSID1 AS
                           (
-                          SELECT AD1.*, AR2.ROWCOUNT
-                          FROM APCS_DATA AS AD1
-                          LEFT JOIN APCS_ROWCOUNT AS AR2
-                          on AD1.ENCRYPTED_HESID = AR2.ENCRYPTED_HESID
-                          AND AD1.NEW_CIPS = AR2.NEW_CIPS
-                          AND AD1.ADMIDATE_FILLED = AR2.ADMIDATE_FILLED
+                          SELECT *, CASE
+                            WHEN NEW_CIPS = 1 THEN ROWNUMBER
+                            WHEN NEW_CIPS = 0 THEN 0
+                          END CIPS_ID_TEMP
+                           FROM APCS_NEWCIPS
                           )
-                          
-                        SELECT APCS_AUGMENTED.*, CASE
-                          WHEN NEW_CIPS = 0 THEN LAG(ROWCOUNT, 1) OVER ", cips_grouping, "
-                          WHEN NEW_CIPS = 1 THEN ROWCOUNT
+                        
+                        SELECT ", str_c(cols_to_keep, collapse = ", "), ", NEW_CIPS, CASE
+                          WHEN NEW_CIPS = 1 THEN CIPS_ID_TEMP
+                          WHEN NEW_CIPS = 0 THEN MAX(CIPS_ID_TEMP) OVER (PARTITION BY ENCRYPTED_HESID  
+                            ORDER BY ROWNUMBER ASC ROWS BETWEEN
+                            UNBOUNDED PRECEDING AND CURRENT ROW)
                           END CIPS_ID
-                        FROM APCS_AUGMENTED
+                        FROM APCS_CIPSID1
                        "))
   
   dbRemoveTable(db, "APCS")
