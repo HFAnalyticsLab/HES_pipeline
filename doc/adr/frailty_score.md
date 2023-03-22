@@ -27,4 +27,4 @@ The frailty score is the sum of the scored frailty categories (0-9). The normali
 
 ## Status
 
-Implemented in the [HES cleaning pipeline](https://github.com/HFAnalyticsLab/HES_pipeline) used to prepare the raw data for this project (see [src/comorbidities.R](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/src/comorbidities.R])), potential future optimisation.
+Implemented in the [HES cleaning pipeline](https://github.com/HFAnalyticsLab/HES_pipeline) used to prepare the raw data for this project (see [src/comorbidities.R](https://github.com/HFAnalyticsLab/HES_pipeline/blob/master/src/comorbidities.R)), potential future optimisation.
